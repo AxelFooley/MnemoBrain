@@ -16,7 +16,7 @@ no memory logic of its own.
 | How it's accessed | in-process Python (SQLite, no server) | CLI + HTTP service (port 3131) that doubles as an MCP endpoint |
 | When the agent touches it | every turn, implicitly (recall + inject) | explicitly, when it decides to write or look something up |
 | Where data lives | `$MNEMOSYNE_DATA_DIR` (`$MNEMOBRAIN_HOME/data/mnemosyne`) | `$MNEMOBRAIN_HOME/.gbrain/` (follows the service's HOME) |
-| Latency profile | sub-millisecond, local | local service, searchable index + embeddings |
+| Latency profile | sub-millisecond, local; recall is recency-weighted (168h halflife default, see CONFIG.md) | local service, searchable index + embeddings |
 
 The split mirrors how people use memory: most of what an agent needs this turn
 is "what has already been said", which should cost nothing and require no

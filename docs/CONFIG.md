@@ -22,6 +22,7 @@ the pin/port/model and re-run `mnemobrain init` to persist new values.
 | `MNEMOBRAIN_OLLAMA_URL` | `http://localhost:11434/v1` | OpenAI-compatible embeddings base URL |
 | `MNEMOBRAIN_EMBED_MODEL` | `ollama:bge-m3` | embedding model id |
 | `MNEMOBRAIN_EMBED_DIMS` | `1024` | embedding dimensionality |
+| `MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` | `168` | Hours until a memory's recency boost halves in SDK/CLI recall (temporal decay) |
 
 Derived exports from `mnemobrain env` (not separately configurable):
 
@@ -65,8 +66,19 @@ Notes:
 
 - `MNEMOBRAIN_HOME` itself never comes from the file (chicken-and-egg); env or
   default only.
+
 - `MNEMOBRAIN_GBRAIN_URL` defaults to a value derived from
   `MNEMOBRAIN_GBRAIN_PORT`; set the URL explicitly only if health lives on a
   different path.
 - Re-run `mnemobrain init` after changing pins/ports so the file and the
   running stack agree.
+
+## Temporal decay
+
+Mnemosyne applies engine-native recency weighting in recall:
+`boost = exp(-hours_delta / halflife)`. MnemoBrain ships a 168h halflife (a
+week) — agent memory should outlive a news cycle — while upstream defaults to
+24h. Set `MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` to taste; it governs the SDK and
+CLI recall paths. Caveat: framework-hook providers (e.g. Hermes') use their
+own in-code halflife (48h at the pinned version);
+`MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` does not override that path.

@@ -18,6 +18,7 @@ DEFAULTS = {
     "MNEMOBRAIN_OLLAMA_URL": "http://localhost:11434/v1",
     "MNEMOBRAIN_EMBED_MODEL": "ollama:bge-m3",
     "MNEMOBRAIN_EMBED_DIMS": "1024",
+    "MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS": "168",
 }
 
 FILE_KEYS = tuple(k for k in DEFAULTS if k != "MNEMOBRAIN_HOME")
