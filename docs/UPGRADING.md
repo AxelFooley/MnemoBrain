@@ -29,11 +29,11 @@ GBrain keeps derived indexes next to its pages. After any gbrain version jump,
 rebuild them before trusting queries:
 
 ```sh
-eval "$(mnemobrain env)"
-"$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" reindex --home "$GBRAIN_HOME"
+HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" reindex
 ```
 
-(`gbrain --help` shows the exact reindex flags for your pinned ref.)
+(gbrain has no path flags; it always operates on `$HOME/.gbrain`, so the
+launcher's HOME isolation is what points it at this stack.)
 
 ## Verify
 

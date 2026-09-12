@@ -19,14 +19,12 @@ def verdict(msg):
 
 
 def render_launcher(bin_path):
-    h = config.home()
+    # gbrain reads OLLAMA_BASE_URL and follows $HOME/.gbrain for its brain, so
+    # isolating HOME is what scopes it to this stack. MNEMOBRAIN_* stays an
+    # mnemobrain-CLI-only namespace; only this mapping crosses the boundary.
     env = {
-        "HOME": str(h),
-        "GBRAIN_HOME": str(h / "data" / "gbrain"),
-        "MNEMOSYNE_HOME": str(h / "data" / "mnemosyne"),
-        "MNEMOBRAIN_OLLAMA_URL": config.get_env("MNEMOBRAIN_OLLAMA_URL"),
-        "MNEMOBRAIN_EMBED_MODEL": config.get_env("MNEMOBRAIN_EMBED_MODEL"),
-        "MNEMOBRAIN_EMBED_DIMS": config.get_env("MNEMOBRAIN_EMBED_DIMS"),
+        "HOME": str(config.home()),
+        "OLLAMA_BASE_URL": config.get_env("MNEMOBRAIN_OLLAMA_URL"),
     }
     lines = [
         "#!/bin/sh",
@@ -36,7 +34,7 @@ def render_launcher(bin_path):
     lines += [f'{k}="{v}"' for k, v in env.items()]
     lines += ["export " + " ".join(env), ""]
     port = config.get_env("MNEMOBRAIN_GBRAIN_PORT")
-    lines.append(f'exec "{bin_path}" serve --port "{port}" --home "$GBRAIN_HOME"')
+    lines.append(f'exec "{bin_path}" serve --http --port "{port}"')
     return "\n".join(lines) + "\n"
 
 
@@ -66,6 +64,8 @@ def cmd_install(args):
     say(f"install: gbrain#{ref} done")
     config.init_dirs()
     config.write_config()
+    say("install: gbrain config.json written" if config.write_gbrain_config()
+        else "install: gbrain config.json kept")
     shim = config.dirs()["bin"] / "mnemobrain"
     config.write_atomic(shim, render_shim().encode(), executable=True)
     say(f"install: shim {shim} (add {config.dirs()['bin']} to PATH to use it)")
@@ -78,6 +78,8 @@ def cmd_init(args):
         say(f"init: created {d}")
     wrote = config.write_config()
     say("init: config written" if wrote else "init: config unchanged")
+    say("init: gbrain config.json written" if config.write_gbrain_config()
+        else "init: gbrain config.json kept (already present)")
     verdict(f"init: ok (layout + config at {config.home()})")
     return 0
 

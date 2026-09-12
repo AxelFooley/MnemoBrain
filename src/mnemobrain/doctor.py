@@ -67,6 +67,23 @@ def check_gbrain_bin():
                   "run: mnemobrain install")
 
 
+def check_gbrain_cfg():
+    path = config.home() / ".gbrain" / "config.json"
+    if not path.exists():
+        return _print("WARN", "gbrain-cfg", f"missing: {path}", "run: mnemobrain init")
+    try:
+        data = json.loads(path.read_text())
+    except (ValueError, OSError) as e:
+        return _print("WARN", "gbrain-cfg", f"unparseable: {path} ({e})",
+                      f"edit or remove {path}, then run: mnemobrain init")
+    want = config.get_env("MNEMOBRAIN_EMBED_MODEL")
+    got = data.get("embedding_model")
+    if got == want:
+        return _print("PASS", "gbrain-cfg", f"{path} (embedding_model {got})")
+    return _print("WARN", "gbrain-cfg", f"embedding_model {got!r} in config.json but {want!r} resolved",
+                  f"edit {path} or MNEMOBRAIN_EMBED_MODEL")
+
+
 def check_dirs():
     missing = [str(d) for d in config.dirs().values() if not (d.exists() and os.access(d, os.W_OK))]
     if not missing:
@@ -120,8 +137,8 @@ def check_pidfile():
     return _print("WARN", "pidfile", f"stale pidfile {path} (pid {pid} not running)", "run: mnemobrain stop gbrain")
 
 
-CHECKS = (check_python, check_bun, check_mnemosyne, check_gbrain_bin, check_dirs,
-          check_health, check_ollama, check_disk, check_pidfile)
+CHECKS = (check_python, check_bun, check_mnemosyne, check_gbrain_bin, check_gbrain_cfg,
+          check_dirs, check_health, check_ollama, check_disk, check_pidfile)
 
 
 def run():

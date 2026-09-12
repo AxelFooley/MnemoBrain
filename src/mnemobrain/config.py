@@ -4,6 +4,7 @@ Every environment variable in the stack is read through get_env() — no
 scattered os.environ lookups elsewhere.
 """
 
+import json
 import os
 import pathlib
 import tempfile
@@ -115,12 +116,27 @@ def write_config():
     return write_atomic(dirs()["config"] / "mnemobrain.yaml", render_config().encode())
 
 
+def write_gbrain_config():
+    """Write <home>/.gbrain/config.json (create-if-absent) so gbrain picks up
+    the configured embedder; gbrain reads it from $HOME, which the launcher
+    isolates to MNEMOBRAIN_HOME. Existing files are left untouched."""
+    path = home() / ".gbrain" / "config.json"
+    if path.exists():
+        return False
+    payload = {
+        "engine": "pglite",
+        "database_path": str(home() / ".gbrain" / "brain.pglite"),
+        "embedding_model": get_env("MNEMOBRAIN_EMBED_MODEL"),
+        "embedding_dimensions": int(get_env("MNEMOBRAIN_EMBED_DIMS")),
+    }
+    return write_atomic(path, json.dumps(payload, indent=2).encode() + b"\n")
+
+
 def env_lines():
     h = home()
     lines = [f'export MNEMOBRAIN_HOME="{h}"']
     for name in FILE_KEYS:
         lines.append(f'export {name}="{get_env(name)}"')
-    lines.append(f'export GBRAIN_HOME="{h}/data/gbrain"')
-    lines.append(f'export MNEMOSYNE_HOME="{h}/data/mnemosyne"')
+    lines.append(f'export MNEMOSYNE_DATA_DIR="{h}/data/mnemosyne"')
     lines.append('# optional: export PATH="$MNEMOBRAIN_HOME/bin:$PATH"  # mnemobrain shim')
     return lines

@@ -9,17 +9,18 @@ engines. It contains no memory logic itself.
 inside the agent runtime: every conversation turn it recalls relevant memories
 and injects them into context, and stores new turns automatically. The agent
 does not call it explicitly. Its stores live at
-`$MNEMOBRAIN_HOME/data/mnemosyne` (exported as `MNEMOSYNE_HOME`). Embeddings
-come from the configured OpenAI-compatible endpoint (default: local Ollama,
-model `ollama:bge-m3`, 1024 dims).
+`$MNEMOBRAIN_HOME/data/mnemosyne` (exported as `MNEMOSYNE_DATA_DIR` by
+`mnemobrain env`). Embeddings come from the configured OpenAI-compatible
+endpoint (default: local Ollama, model `ollama:bge-m3`, 1024 dims).
 
 **GBrain** (GitHub `garrytan/gbrain`) is deliberate knowledge. It is a
 searchable page brain with entity, take, and graph layers; the agent or user
 explicitly writes pages and queries them. It runs as an HTTP service
-(`gbrain serve`) on `$MNEMOBRAIN_GBRAIN_PORT` (default 3131) and doubles as an
-MCP endpoint. Its pages live at `$MNEMOBRAIN_HOME/data/gbrain` (exported as
-`GBRAIN_HOME`); the launcher also sets `HOME=$MNEMOBRAIN_HOME`, so gbrain's
-dotfile state lands predictably under the MnemoBrain root.
+(`gbrain serve --http`) on `$MNEMOBRAIN_GBRAIN_PORT` (default 3131) and doubles
+as an MCP endpoint. The launcher sets `HOME=$MNEMOBRAIN_HOME` and maps
+`MNEMOBRAIN_OLLAMA_URL` to `OLLAMA_BASE_URL`, so gbrain's state — its
+`$HOME/.gbrain` config and pglite brain — lands predictably under the MnemoBrain
+root.
 
 ## Wiring
 
@@ -36,7 +37,9 @@ MnemoBrain does four things:
    into `$MNEMOBRAIN_HOME` (which gets a minimal `package.json` if absent).
 2. **config** — writes one `KEY: value` file at
    `$MNEMOBRAIN_HOME/config/mnemobrain.yaml` from a single defaults table in
-   `src/mnemobrain/config.py` (parsed by a 15-line stdlib loader, no yaml lib).
+   `src/mnemobrain/config.py` (parsed by a 15-line stdlib loader, no yaml lib),
+   plus gbrain's `$HOME/.gbrain/config.json` with the resolved embedder
+   (create-if-absent, so a hand-tuned file is never clobbered).
    Precedence: process env > config file > built-in default. All writes are
    atomic (`os.replace`) and idempotent (skip when bytes are unchanged).
 3. **launch** — `mnemobrain start gbrain` renders

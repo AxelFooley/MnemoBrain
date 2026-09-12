@@ -27,11 +27,23 @@ Derived exports from `mnemobrain env` (not separately configurable):
 
 | Variable | Value | Meaning |
 |---|---|---|
-| `GBRAIN_HOME` | `$MNEMOBRAIN_HOME/data/gbrain` | where gbrain pages live |
-| `MNEMOSYNE_HOME` | `$MNEMOBRAIN_HOME/data/mnemosyne` | where mnemosyne stores live |
+| `MNEMOSYNE_DATA_DIR` | `$MNEMOBRAIN_HOME/data/mnemosyne` | where mnemosyne stores live |
 
-The launcher (`services/run_gbrain.sh`) fixes `HOME=$MNEMOBRAIN_HOME` for the
-gbrain process, so its dotfile config also lands under the MnemoBrain root.
+The wiring story: `mnemobrain env` exports `MNEMOSYNE_DATA_DIR` plus the
+`MNEMOBRAIN_*` knobs. The launcher (`services/run_gbrain.sh`) isolates
+`HOME=$MNEMOBRAIN_HOME` for the gbrain process and maps
+`MNEMOBRAIN_OLLAMA_URL` to `OLLAMA_BASE_URL` (the variable gbrain actually
+reads), so gbrain's state — including `$HOME/.gbrain/config.json` and its
+`brain.pglite` database — lands predictably under the MnemoBrain root.
+
+## gbrain config.json
+
+gbrain reads its embedding model and dimensions from
+`$HOME/.gbrain/config.json`. `mnemobrain install` and `mnemobrain init` write
+that file (atomically) with the resolved `MNEMOBRAIN_EMBED_MODEL` /
+`MNEMOBRAIN_EMBED_DIMS`, using create-if-absent semantics: an existing file is
+never overwritten (it may be hand-customized; `doctor` reports if its
+`embedding_model` has drifted from the resolved value).
 
 ## config file format
 
