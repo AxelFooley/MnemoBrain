@@ -105,7 +105,23 @@ Verification: `./.venv/bin/mnemobrain doctor` prints PASS or WARN on the
 embedding engine is optional at install time. If you skipped it intentionally,
 note that reflex recall stays degraded until it is reachable.
 
-## 6. Start GBrain and verify the stack
+## 6. Smoke test the knowledge brain
+
+```sh
+eval "$(./.venv/bin/mnemobrain env)"
+HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" put mnemobrain-smoke --content "# smoke
+
+mnemobrain smoke test"
+HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" get mnemobrain-smoke   # must contain: mnemobrain smoke test
+HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" delete mnemobrain-smoke   # cleanup, exit 0
+```
+
+Run the smoke test while the service is stopped — gbrain is a single-writer
+store and its CLI refuses writes while `gbrain serve` holds the database.
+
+Verification: `get` prints the body and `delete` exits 0.
+
+## 7. Start GBrain and verify the stack
 
 ```sh
 ./.venv/bin/mnemobrain start gbrain
@@ -114,21 +130,6 @@ note that reflex recall stays degraded until it is reachable.
 
 Verification: `doctor` exits 0 and its summary line ends in `0 fail`. Every
 FAIL must be resolved via its printed fix line before continuing.
-
-## 7. Smoke test the knowledge brain
-
-```sh
-eval "$(./.venv/bin/mnemobrain env)"
-GBRAIN="$MNEMOBRAIN_HOME/node_modules/.bin/gbrain"
-HOME="$MNEMOBRAIN_HOME" "$GBRAIN" put mnemobrain-smoke --content "# smoke
-
-mnemobrain smoke test"
-HOME="$MNEMOBRAIN_HOME" "$GBRAIN" get mnemobrain-smoke   # must contain: mnemobrain smoke test
-HOME="$MNEMOBRAIN_HOME" "$GBRAIN" delete mnemobrain-smoke   # cleanup, exit 0
-```
-
-Verification: `get` prints the body, `delete` exits 0, and `mnemobrain doctor`
-still reports the gbrain service healthy afterwards.
 
 ## 8. Wire into the agent framework
 

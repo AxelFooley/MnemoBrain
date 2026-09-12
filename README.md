@@ -85,6 +85,10 @@ pm2:
 pm2 start "$HOME/.mnemobrain/services/run_gbrain.sh" --name gbrain
 ```
 
+If a supervisor owns the service instead of `mnemobrain start`, `mnemobrain
+status` shows stopped (no pidfile) — check health with `mnemobrain doctor`
+instead.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

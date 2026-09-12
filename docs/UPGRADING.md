@@ -14,13 +14,12 @@ a byte copy made before the upgrade.
 
 ## Upgrade one engine
 
-Bump the pin, install, restart:
+Bump the pin and install (the service is still stopped from the backup):
 
 ```sh
 export MNEMOBRAIN_MNEMOSYNE_VERSION="3.16.0"   # or:
 export MNEMOBRAIN_GBRAIN_REF="v0.51.0.0"
 mnemobrain install
-mnemobrain start gbrain
 ```
 
 ## After a gbrain upgrade: reindex
@@ -35,9 +34,13 @@ HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" reindex
 (gbrain has no path flags; it always operates on `$HOME/.gbrain`, so the
 launcher's HOME isolation is what points it at this stack.)
 
+gbrain is a single-writer store: CLI commands refuse writes while the service
+holds the database — reindex before starting it.
+
 ## Verify
 
 ```sh
+mnemobrain start gbrain
 mnemobrain doctor        # expect: 0 fail
 ```
 
