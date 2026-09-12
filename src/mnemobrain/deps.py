@@ -27,7 +27,7 @@ def version_tuple(text):
 def bun_version():
     if not shutil.which("bun"):
         return None
-    r = subprocess.run(["bun", "--version"], capture_output=True, text=True)
+    r = subprocess.run(["bun", "--version"], capture_output=True, text=True, check=False)
     if r.returncode != 0:
         return None
     try:
@@ -41,7 +41,11 @@ def check_bun():
     if v is None:
         return False, "bun not found or not runnable", f"install bun: {BUN_INSTALL}"
     if v < MIN_BUN:
-        return False, f"bun {'.'.join(map(str, v))} < {'.'.join(map(str, MIN_BUN))}", f"upgrade bun: {BUN_INSTALL}"
+        return (
+            False,
+            f"bun {'.'.join(map(str, v))} < {'.'.join(map(str, MIN_BUN))}",
+            f"upgrade bun: {BUN_INSTALL}",
+        )
     return True, ".".join(map(str, v)), ""
 
 
@@ -55,9 +59,13 @@ def gbrain_bin():
 
 def install_mnemosyne():
     version = config.get_env("MNEMOBRAIN_MNEMOSYNE_VERSION")
-    r = subprocess.run([sys.executable, "-m", "pip", "install", f"mnemosyne-memory=={version}"])
+    r = subprocess.run(
+        [sys.executable, "-m", "pip", "install", f"mnemosyne-memory=={version}"], check=False
+    )
     if r.returncode != 0:
-        raise SystemExit(f"deps: pip install mnemosyne-memory=={version} failed (exit {r.returncode})")
+        raise SystemExit(
+            f"deps: pip install mnemosyne-memory=={version} failed (exit {r.returncode})"
+        )
     return version
 
 
@@ -68,7 +76,9 @@ def install_gbrain():
     if not pkg.exists():
         pkg.write_text(json.dumps({"name": "mnemobrain-stack", "private": True}, indent=2) + "\n")
     ref = config.get_env("MNEMOBRAIN_GBRAIN_REF")
-    r = subprocess.run(["bun", "add", "--ignore-scripts", f"{GBRAIN_REPO}#{ref}"], cwd=str(h))
+    r = subprocess.run(
+        ["bun", "add", "--ignore-scripts", f"{GBRAIN_REPO}#{ref}"], cwd=str(h), check=False
+    )
     if r.returncode != 0:
         raise SystemExit(f"deps: bun add {GBRAIN_REPO}#{ref} failed (exit {r.returncode})")
     return ref
