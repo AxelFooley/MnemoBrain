@@ -150,6 +150,9 @@ Then point the two memory surfaces at the engines:
   `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT` (health URL:
   `$MNEMOBRAIN_GBRAIN_URL`).
 
+For the full wiring explanation (hooks, SDK, MCP, env contract), see
+[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
 ### OPTIONAL: Hermes appendix
 
 - symlink this repo into Hermes' skills directory so the install steps travel

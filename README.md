@@ -12,6 +12,14 @@ agent ──▶ mnemosyne  (reflex: auto recall + inject per turn)
      └──▶ gbrain     (deliberate: searchable pages over HTTP/MCP)
 ```
 
+## How it works
+
+The reflex loop is hooked per turn: before every model call, a pre-LLM hook
+recalls matching Mnemosyne memories, injects them into the prompt, and the
+turn is stored afterwards. The deliberate loop is explicit: the agent reads
+and writes GBrain pages over MCP/CLI when it decides to. Full wiring:
+[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
 ## Quick start
 
 ```sh
