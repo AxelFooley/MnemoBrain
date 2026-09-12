@@ -15,7 +15,7 @@ agent ──▶ mnemosyne  (reflex: auto recall + inject per turn)
 ## Quick start
 
 ```sh
-git clone https://github.com/mnemobrain/mnemobrain && cd mnemobrain
+git clone https://github.com/AxelFooley/MnemoBrain && cd MnemoBrain
 ./scripts/install.sh
 export PATH="$HOME/.mnemobrain/bin:$PATH"   # shim created by install
 mnemobrain init

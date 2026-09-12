@@ -34,8 +34,8 @@ bun:      curl -fsSL https://bun.sh/install | bash
 ## 2. Bootstrap the CLI
 
 ```sh
-git clone https://github.com/mnemobrain/mnemobrain
-cd mnemobrain
+git clone https://github.com/AxelFooley/MnemoBrain
+cd MnemoBrain
 python3 -m venv .venv
 ./.venv/bin/python -m pip install -e .
 ```
@@ -120,12 +120,14 @@ FAIL must be resolved via its printed fix line before continuing.
 ```sh
 eval "$(./.venv/bin/mnemobrain env)"
 GBRAIN="$MNEMOBRAIN_HOME/node_modules/.bin/gbrain"
-HOME="$MNEMOBRAIN_HOME" "$GBRAIN" put mnemobrain-smoke --title "smoke" --body "mnemobrain smoke test"
+HOME="$MNEMOBRAIN_HOME" "$GBRAIN" put mnemobrain-smoke --content "# smoke
+
+mnemobrain smoke test"
 HOME="$MNEMOBRAIN_HOME" "$GBRAIN" get mnemobrain-smoke   # must contain: mnemobrain smoke test
-HOME="$MNEMOBRAIN_HOME" "$GBRAIN" rm mnemobrain-smoke    # cleanup, exit 0
+HOME="$MNEMOBRAIN_HOME" "$GBRAIN" delete mnemobrain-smoke   # cleanup, exit 0
 ```
 
-Verification: `get` prints the body, `rm` exits 0, and `mnemobrain doctor`
+Verification: `get` prints the body, `delete` exits 0, and `mnemobrain doctor`
 still reports the gbrain service healthy afterwards.
 
 ## 8. Wire into the agent framework
