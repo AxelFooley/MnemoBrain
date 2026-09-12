@@ -4,14 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mnemobrain"
-version = "0.2.0"
+version = "0.3.0"
 description = "Installer, launcher, and doctor for the Mnemosyne + GBrain agent memory stack."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 
+[project.optional-dependencies]
+dev = ["ruff>=0.6", "vulture>=2.11"]
+
 [project.scripts]
 mnemobrain = "mnemobrain.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
 
 [tool.setuptools.packages.find]
 where = ["src"]

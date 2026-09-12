@@ -76,8 +76,13 @@ class TestLauncher(EnvCase):
         text = cli.render_launcher("/bin/gbrain-fake")
         self.assertIn(f'HOME="{self.home}"', text)
         self.assertIn(f'OLLAMA_BASE_URL="{config.get_env("MNEMOBRAIN_OLLAMA_URL")}"', text)
-        for phantom in ("GBRAIN_" + "HOME", "MNEMOSYNE_" + "HOME", "MNEMOBRAIN_OLLAMA_URL",
-                        "MNEMOBRAIN_EMBED_MODEL", "MNEMOBRAIN_EMBED_DIMS"):
+        for phantom in (
+            "GBRAIN_" + "HOME",
+            "MNEMOSYNE_" + "HOME",
+            "MNEMOBRAIN_OLLAMA_URL",
+            "MNEMOBRAIN_EMBED_MODEL",
+            "MNEMOBRAIN_EMBED_DIMS",
+        ):
             self.assertNotIn(phantom, text)
 
     def test_launcher_port_override(self):
@@ -100,8 +105,9 @@ class TestGbrainConfig(EnvCase):
     def test_write_creates_valid_json_then_keeps(self):
         self.assertTrue(config.write_gbrain_config())
         data = json.loads(self.path().read_text())
-        self.assertEqual(set(data), {"engine", "database_path", "embedding_model",
-                                     "embedding_dimensions"})
+        self.assertEqual(
+            set(data), {"engine", "database_path", "embedding_model", "embedding_dimensions"}
+        )
         self.assertEqual(data["engine"], "pglite")
         self.assertEqual(data["database_path"], str(self.home / ".gbrain" / "brain.pglite"))
         self.assertEqual(data["embedding_model"], config.get_env("MNEMOBRAIN_EMBED_MODEL"))

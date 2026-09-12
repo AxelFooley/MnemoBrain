@@ -22,7 +22,6 @@ DEFAULTS = {
 }
 
 FILE_KEYS = tuple(k for k in DEFAULTS if k != "MNEMOBRAIN_HOME")
-CONFIG_REL = "config/mnemobrain.yaml"
 
 
 def default_value(name):
@@ -32,7 +31,7 @@ def default_value(name):
 
 
 def file_key(name):
-    return name[len("MNEMOBRAIN_"):].lower()
+    return name[len("MNEMOBRAIN_") :].lower()
 
 
 def parse_config(text):

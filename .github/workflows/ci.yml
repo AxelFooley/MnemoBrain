@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with dev tools
+        run: pip install -e ".[dev]"
+      - name: Ruff lint
+        run: ruff check src/ tests/
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+  dead-code:
+    name: Dead code (vulture)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with dev tools
+        run: pip install -e ".[dev]"
+      - name: Vulture (whitelisted)
+        run: vulture src/ .github/vulture-whitelist.py --min-confidence 80
+
+  integration:
+    name: Integration (install, init, service lifecycle, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      - name: Install package
+        run: pip install -e .
+      - name: Install engines (pinned mnemosyne + gbrain)
+        run: mnemobrain install
+      - name: Initialize state
+        run: mnemobrain init
+      - name: Env contract emits
+        run: |
+          mnemobrain env | grep MNEMOSYNE_DATA_DIR
+          mnemobrain env | grep MNEMOBRAIN_GBRAIN_PORT
+          mnemobrain env | grep MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS
+      - name: Service lifecycle (start, health, stop)
+        run: |
+          mnemobrain start gbrain
+          GBURL="$(mnemobrain env | grep MNEMOBRAIN_GBRAIN_URL | sed -E 's/^export [A-Z_]+="//; s/"$//')"
+          for i in $(seq 1 30); do
+            curl -fsS "$GBURL" && break
+            sleep 2
+          done
+          mnemobrain status | grep -i running
+          test -f "$HOME/.mnemobrain/.gbrain/config.json"
+          grep -q embedding_model "$HOME/.mnemobrain/.gbrain/config.json"
+          mnemobrain stop gbrain
+          sleep 2
+          if curl -fsS "$GBURL"; then
+            echo "service still up after stop" && exit 1
+          fi
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v

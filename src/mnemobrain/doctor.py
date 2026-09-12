@@ -29,7 +29,7 @@ def health_check():
         return True, f"ok at {url} (version {data.get('version', 'unknown')})"
     except urllib.error.HTTPError as e:
         return True, f"reachable at {url} (HTTP {e.code}, no JSON health body)"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, f"unreachable at {url} ({type(e).__name__}: {e})"
 
 
@@ -54,17 +54,27 @@ def check_mnemosyne():
     if found == pin:
         return _print("PASS", "mnemosyne", f"mnemosyne-memory=={found}")
     if found is None:
-        return _print("FAIL", "mnemosyne", "mnemosyne-memory not importable in this interpreter",
-                      f"activate the venv from scripts/install.sh; pip install mnemosyne-memory=={pin}")
-    return _print("FAIL", "mnemosyne", f"found {found}, pinned {pin}", f"pip install mnemosyne-memory=={pin}")
+        return _print(
+            "FAIL",
+            "mnemosyne",
+            "mnemosyne-memory not importable in this interpreter",
+            f"activate the venv from scripts/install.sh; pip install mnemosyne-memory=={pin}",
+        )
+    return _print(
+        "FAIL", "mnemosyne", f"found {found}, pinned {pin}", f"pip install mnemosyne-memory=={pin}"
+    )
 
 
 def check_gbrain_bin():
     path = deps.gbrain_bin()
     if path:
         return _print("PASS", "gbrain-bin", str(path))
-    return _print("FAIL", "gbrain-bin", "gbrain binary not found under $MNEMOBRAIN_HOME/node_modules/.bin",
-                  "run: mnemobrain install")
+    return _print(
+        "FAIL",
+        "gbrain-bin",
+        "gbrain binary not found under $MNEMOBRAIN_HOME/node_modules/.bin",
+        "run: mnemobrain install",
+    )
 
 
 def check_gbrain_cfg():
@@ -74,21 +84,31 @@ def check_gbrain_cfg():
     try:
         data = json.loads(path.read_text())
     except (ValueError, OSError) as e:
-        return _print("WARN", "gbrain-cfg", f"unparseable: {path} ({e})",
-                      f"edit or remove {path}, then run: mnemobrain init")
+        return _print(
+            "WARN",
+            "gbrain-cfg",
+            f"unparseable: {path} ({e})",
+            f"edit or remove {path}, then run: mnemobrain init",
+        )
     want = config.get_env("MNEMOBRAIN_EMBED_MODEL")
     got = data.get("embedding_model")
     if got == want:
         return _print("PASS", "gbrain-cfg", f"{path} (embedding_model {got})")
-    return _print("WARN", "gbrain-cfg", f"embedding_model {got!r} in config.json but {want!r} resolved",
-                  f"edit {path} or MNEMOBRAIN_EMBED_MODEL")
+    return _print(
+        "WARN",
+        "gbrain-cfg",
+        f"embedding_model {got!r} in config.json but {want!r} resolved",
+        f"edit {path} or MNEMOBRAIN_EMBED_MODEL",
+    )
 
 
 def check_dirs():
     missing = [str(d) for d in config.dirs().values() if not (d.exists() and os.access(d, os.W_OK))]
     if not missing:
         return _print("PASS", "data-dirs", f"present and writable under {config.home()}")
-    return _print("FAIL", "data-dirs", f"missing or unwritable: {', '.join(missing)}", "run: mnemobrain init")
+    return _print(
+        "FAIL", "data-dirs", f"missing or unwritable: {', '.join(missing)}", "run: mnemobrain init"
+    )
 
 
 def check_health():
@@ -106,12 +126,16 @@ def check_ollama():
         reachable = True
     except urllib.error.HTTPError:
         reachable = True
-    except Exception:
+    except Exception:  # noqa: BLE001
         reachable = False
     if reachable:
         return _print("PASS", "ollama", f"embedding engine reachable at {url}")
-    return _print("WARN", "ollama", f"embedding engine unreachable at {url} (model {model})",
-                  "optional: install ollama (https://ollama.com) then run: ollama pull bge-m3")
+    return _print(
+        "WARN",
+        "ollama",
+        f"embedding engine unreachable at {url} (model {model})",
+        "optional: install ollama (https://ollama.com) then run: ollama pull bge-m3",
+    )
 
 
 def check_disk():
@@ -121,7 +145,12 @@ def check_disk():
     free = shutil.disk_usage(target).free
     if free > 1 << 30:
         return _print("PASS", "disk", f"{free >> 20} MiB free at {target}")
-    return _print("FAIL", "disk", f"only {free >> 20} MiB free at {target}", "free at least 1 GiB of disk space")
+    return _print(
+        "FAIL",
+        "disk",
+        f"only {free >> 20} MiB free at {target}",
+        "free at least 1 GiB of disk space",
+    )
 
 
 def check_pidfile():
@@ -134,11 +163,26 @@ def check_pidfile():
         return _print("WARN", "pidfile", f"unparseable: {path}", f"remove it: rm {path}")
     if deps.pid_alive(pid):
         return _print("PASS", "pidfile", f"gbrain pid {pid}")
-    return _print("WARN", "pidfile", f"stale pidfile {path} (pid {pid} not running)", "run: mnemobrain stop gbrain")
+    return _print(
+        "WARN",
+        "pidfile",
+        f"stale pidfile {path} (pid {pid} not running)",
+        "run: mnemobrain stop gbrain",
+    )
 
 
-CHECKS = (check_python, check_bun, check_mnemosyne, check_gbrain_bin, check_gbrain_cfg,
-          check_dirs, check_health, check_ollama, check_disk, check_pidfile)
+CHECKS = (
+    check_python,
+    check_bun,
+    check_mnemosyne,
+    check_gbrain_bin,
+    check_gbrain_cfg,
+    check_dirs,
+    check_health,
+    check_ollama,
+    check_disk,
+    check_pidfile,
+)
 
 
 def run():

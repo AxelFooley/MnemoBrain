@@ -1,3 +1,6 @@
+[![CI](https://github.com/AxelFooley/MnemoBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/AxelFooley/MnemoBrain/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/AxelFooley/MnemoBrain/actions/workflows/codeql.yml/badge.svg)](https://github.com/AxelFooley/MnemoBrain/actions/workflows/codeql.yml)
+
 # MnemoBrain
 
 MnemoBrain gives any AI agent a two-engine memory system: **Mnemosyne** (reflex
@@ -99,6 +102,11 @@ pm2 start "$HOME/.mnemobrain/services/run_gbrain.sh" --name gbrain
 If a supervisor owns the service instead of `mnemobrain start`, `mnemobrain
 status` shows stopped (no pidfile) — check health with `mnemobrain doctor`
 instead.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, local checks, and the
+CI/merge rules.
 
 ## License
 

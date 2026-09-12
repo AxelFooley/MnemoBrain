@@ -64,8 +64,11 @@ def cmd_install(args):
     say(f"install: gbrain#{ref} done")
     config.init_dirs()
     config.write_config()
-    say("install: gbrain config.json written" if config.write_gbrain_config()
-        else "install: gbrain config.json kept")
+    say(
+        "install: gbrain config.json written"
+        if config.write_gbrain_config()
+        else "install: gbrain config.json kept"
+    )
     shim = config.dirs()["bin"] / "mnemobrain"
     config.write_atomic(shim, render_shim().encode(), executable=True)
     say(f"install: shim {shim} (add {config.dirs()['bin']} to PATH to use it)")
@@ -78,8 +81,11 @@ def cmd_init(args):
         say(f"init: created {d}")
     wrote = config.write_config()
     say("init: config written" if wrote else "init: config unchanged")
-    say("init: gbrain config.json written" if config.write_gbrain_config()
-        else "init: gbrain config.json kept (already present)")
+    say(
+        "init: gbrain config.json written"
+        if config.write_gbrain_config()
+        else "init: gbrain config.json kept (already present)"
+    )
     verdict(f"init: ok (layout + config at {config.home()})")
     return 0
 
@@ -101,8 +107,13 @@ def cmd_start(args):
     config.write_atomic(launcher, render_launcher(bin_path).encode(), executable=True)
     say(f"start: launcher {launcher}")
     with open(d["logs"] / "gbrain.log", "ab") as log:
-        proc = subprocess.Popen(["/bin/sh", str(launcher)], stdout=log, stderr=log,
-                                stdin=subprocess.DEVNULL, start_new_session=True)
+        proc = subprocess.Popen(
+            ["/bin/sh", str(launcher)],
+            stdout=log,
+            stderr=log,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
     pidfile.write_text(f"{proc.pid}\n")
     verdict(f"gbrain: started (pid {proc.pid}, log {d['logs'] / 'gbrain.log'})")
     return 0
@@ -148,7 +159,8 @@ def cmd_env(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="mnemobrain",
-        description="Installer, launcher, and doctor for the Mnemosyne + GBrain agent memory stack.")
+        description="Installer, launcher, and doctor for the Mnemosyne + GBrain agent memory stack.",
+    )
     parser.add_argument("--version", action="version", version=f"mnemobrain {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("install", help="install pinned engines + write defaults config")
