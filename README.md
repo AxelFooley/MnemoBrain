@@ -19,6 +19,9 @@ recalls matching Mnemosyne memories, injects them into the prompt, and the
 turn is stored afterwards. The deliberate loop is explicit: the agent reads
 and writes GBrain pages over MCP/CLI when it decides to. Full wiring:
 [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+[templates/AGENT-SYSTEM-PROMPT.md](templates/AGENT-SYSTEM-PROMPT.md) makes the
+agent actually use it; [docs/OPERATIONS.md](docs/OPERATIONS.md) ships the
+watchdog jobs that keep memory healthy.
 
 ## Quick start
 

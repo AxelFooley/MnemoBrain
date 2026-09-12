@@ -161,6 +161,12 @@ For the full wiring explanation (hooks, SDK, MCP, env contract), see
 - register Hermes' gbrain MCP client against
   `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT`
 
+## 9. Make it behavioral (recommended)
+
+Paste [templates/AGENT-SYSTEM-PROMPT.md](templates/AGENT-SYSTEM-PROMPT.md) into
+your agent's system prompt so it actually uses the stack, and schedule the two
+jobs in [docs/OPERATIONS.md](docs/OPERATIONS.md) that keep memory healthy.
+
 ## Failure protocol
 
 Re-run `mnemobrain doctor` and follow its fix lines. Never delete
