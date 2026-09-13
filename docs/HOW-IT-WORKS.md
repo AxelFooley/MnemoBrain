@@ -30,10 +30,9 @@ There are three ways to wire Mnemosyne in:
 1. **Framework hook.** Agent frameworks with a pre-LLM hook call Mnemosyne
    before every model call: the hook passes the user's message, Mnemosyne
    recalls relevant memories and returns a context block the framework injects
-   into the prompt; the same cycle stores the turn afterwards. In Hermes this
-   is the `pre_llm_call` hook plus the bundled `hermes_memory_provider`, whose
-   `prefetch(query, session_id)` returns the rendered context. Other
-   frameworks: Mnemosyne upstream ships integration docs (claude-code, codex,
+   into the prompt; the same cycle stores the turn afterwards. The provider
+   exposes `prefetch(query, session_id)` for exactly this. Mnemosyne upstream
+   ships integration docs (claude-code, codex,
    cursor, windsurf) via its `mnemosyne-install` entry point — see
    `mnemosyne-install --help` and the upstream docs.
 2. **Direct SDK.** For your own code:
