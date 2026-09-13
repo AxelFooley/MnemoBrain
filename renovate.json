@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["src/mnemobrain/config.py"],
+      "matchString": "\"MNEMOBRAIN_MNEMOSYNE_VERSION\": \"(?<currentValue>[^\"]+)\"",
+      "datasource": "pypi",
+      "depName": "mnemosyne-memory",
+      "packageName": "mnemosyne-memory"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["src/mnemobrain/config.py"],
+      "matchString": "\"MNEMOBRAIN_GBRAIN_REF\": \"(?<currentValue>[^\"]+)\"",
+      "datasource": "github-tags",
+      "depName": "garrytan/gbrain",
+      "packageName": "garrytan/gbrain"
+    }
+  ]
+}
