@@ -79,6 +79,7 @@ Mnemosyne applies engine-native recency weighting in recall:
 `boost = exp(-hours_delta / halflife)`. MnemoBrain ships a 168h halflife (a
 week) — agent memory should outlive a news cycle — while upstream defaults to
 24h. Set `MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` to taste; it governs the SDK and
-CLI recall paths. Caveat: framework-hook providers (e.g. Hermes') use their
-own in-code halflife (48h at the pinned version);
-`MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` does not override that path.
+CLI recall paths. Caveat: if your framework wires Mnemosyne through a hook provider, that
+provider may carry its own in-code halflife and
+`MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` will not override that path — check the
+provider's source.

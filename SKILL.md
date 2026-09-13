@@ -153,13 +153,11 @@ Then point the two memory surfaces at the engines:
 For the full wiring explanation (hooks, SDK, MCP, env contract), see
 [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
-### OPTIONAL: Hermes appendix
+### OPTIONAL: skills-directory integration
 
-- symlink this repo into Hermes' skills directory so the install steps travel
-  with the agent: `ln -s <this repo> <hermes-skills-dir>/mnemobrain`
-- set `memory.provider: mnemosyne` in Hermes' `config.yaml`
-- register Hermes' gbrain MCP client against
-  `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT`
+If your agent supports the portable `SKILL.md` convention, symlink this repo
+into its skills directory so the install steps travel with the agent:
+`ln -s <this repo> <skills-dir>/mnemobrain`
 
 ## 9. Make it behavioral (recommended)
 
