@@ -6,18 +6,16 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["src/mnemobrain/config.py"],
-      "matchString": "\"MNEMOBRAIN_MNEMOSYNE_VERSION\": \"(?<currentValue>[^\"]+)\"",
-      "datasource": "pypi",
-      "depName": "mnemosyne-memory",
-      "packageName": "mnemosyne-memory"
+      "matchStrings": ["\"MNEMOBRAIN_MNEMOSYNE_VERSION\": \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "mnemosyne-memory"
     },
     {
       "customType": "regex",
       "managerFilePatterns": ["src/mnemobrain/config.py"],
-      "matchString": "\"MNEMOBRAIN_GBRAIN_REF\": \"(?<currentValue>[^\"]+)\"",
-      "datasource": "github-tags",
-      "depName": "garrytan/gbrain",
-      "packageName": "garrytan/gbrain"
+      "matchStrings": ["\"MNEMOBRAIN_GBRAIN_REF\": \"(?<currentValue>[^\"]+)\""],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "garrytan/gbrain"
     }
   ]
 }
