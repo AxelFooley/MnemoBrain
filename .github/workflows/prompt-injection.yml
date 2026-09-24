@@ -1,0 +1,25 @@
+name: Prompt Injection Scan
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Prompt injection (all files)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      # Always scans ALL files, never diff-only, never skipped: agent-facing
+      # docs are an attack surface.
+      - name: Run in-repo scanner
+        run: python scripts/check_prompt_injection.py .
