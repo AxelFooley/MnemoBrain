@@ -91,12 +91,12 @@ Decision flow:
 1. `GET /health` (127.0.0.1:3131): refused → listener dead, fix the process
    first (`mnemobrain start gbrain`).
 2. `POST /mcp` an `initialize` JSON-RPC with `Authorization: Bearer <token>`:
-   401 → re-auth (mint a fresh admin token / re-run agent register).
-   200 → process is healthy; check Cursor-side MCP config.
+   401 → re-auth (mint a fresh admin token: `gbrain agent register`, 30d default).
+   200 → process is healthy; check the Cursor-side MCP config.
 3. `mnemobrain doctor` reports the two halves separately: `gbrain-svc`
    (liveness) and `mcp-auth` (token). `mcp-auth` is SKIP when the listener is
    unreachable — liveness is the real problem then.
 
 Known gap, closed as of this change: `mnemobrain start gbrain` no longer
 trusts a live pid over a dead listener — it health-gates and returns non-zero
-if `/health` is still unreachable 15s after spawn.
+if `/health` is still unreachable 60s after spawn.

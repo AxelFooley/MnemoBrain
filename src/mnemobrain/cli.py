@@ -141,14 +141,14 @@ def cmd_start(args):
             start_new_session=True,
         )
     pidfile.write_text(f"{proc.pid}\n")
-    for _ in range(30):
+    for _ in range(120):
         ok, detail = doctor.health_check()
         if ok:
             verdict(f"gbrain: healthy (pid {proc.pid}, {detail})")
             return 0
         time.sleep(0.5)
     verdict(
-        f"gbrain: started (pid {proc.pid}) but health unhealthy after 15s — "
+        f"gbrain: started (pid {proc.pid}) but health unhealthy after 60s — "
         f"check {d['logs'] / 'gbrain.log'}"
     )
     return 1
