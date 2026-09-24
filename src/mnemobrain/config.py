@@ -81,9 +81,15 @@ def _read_config_text():
 
 
 def render_config():
+    """Read-modify-write (#19): env-derived keys win and are persisted; values
+    already present in an existing mnemobrain.yaml survive untouched so that
+    install/init bumps (e.g. a new version pin) do not clobber file-only
+    customizations. An absent or empty file renders pure defaults."""
+    existing = parse_config(_read_config_text())
     lines = ["# mnemobrain stack defaults. Process env overrides these values."]
     for name in FILE_KEYS:
-        lines.append(f"{file_key(name)}: {os.environ.get(name) or default_value(name)}")
+        value = os.environ.get(name) or existing.get(file_key(name)) or default_value(name)
+        lines.append(f"{file_key(name)}: {value}")
     return "\n".join(lines) + "\n"
 
 

@@ -76,6 +76,47 @@ class TestConfigWriter(EnvCase):
         self.assertEqual(parsed["gbrain_ref"], "v0.50.0.0")
         self.assertEqual(parsed["gbrain_url"], "http://127.0.0.1:3131/health")
 
+    def _fresh_config(self):
+        self.assertTrue(config.write_config())
+
+    def test_file_only_customization_survives_version_bump(self):
+        # issue #19 repro: freshly installed defaults, hand-edited ollama_url,
+        # then a `mnemobrain install` run that only bumps the version pin via env.
+        self._fresh_config()
+        custom_url = "http://172.17.128.1:11434/v1"
+        text = (
+            self.path()
+            .read_text()
+            .replace(
+                f"ollama_url: {config.DEFAULTS['MNEMOBRAIN_OLLAMA_URL']}",
+                f"ollama_url: {custom_url}",
+            )
+        )
+        self.assertIn(f"ollama_url: {custom_url}", text)
+        self.path().write_text(text)
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "4.1.0"
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        self.assertEqual(parsed["ollama_url"], custom_url)
+        self.assertEqual(parsed["mnemosyne_version"], "4.1.0")
+
+    def test_env_override_wins_and_is_persisted(self):
+        self._fresh_config()
+        os.environ["MNEMOBRAIN_OLLAMA_URL"] = "http://10.0.0.5:11434/v1"
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        self.assertEqual(parsed["ollama_url"], "http://10.0.0.5:11434/v1")
+        # once persisted, it keeps winning without the env var
+        del os.environ["MNEMOBRAIN_OLLAMA_URL"]
+        self.assertEqual(config.get_env("MNEMOBRAIN_OLLAMA_URL"), "http://10.0.0.5:11434/v1")
+
+    def test_fresh_install_renders_pure_defaults(self):
+        self.assertFalse(self.path().exists())
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        for name in config.FILE_KEYS:
+            self.assertEqual(parsed[config.file_key(name)], config.default_value(name))
+
 
 class TestLauncher(EnvCase):
     def test_launcher_serve_http_no_home_flag(self):
