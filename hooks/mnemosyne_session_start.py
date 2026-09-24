@@ -67,7 +67,11 @@ def main(argv):
             return
         recall = get_recall()
 
-        results = recall(query, limit=RECALL_LIMIT)
+        try:
+            results = recall(query, top_k=RECALL_LIMIT)
+        except TypeError:
+            # older/newer engines without the top_k kwarg: default depth
+            results = recall(query)
         if not results:
             return
         block = format_context(results)
