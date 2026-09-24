@@ -33,6 +33,77 @@ def health_check():
         return False, f"unreachable at {url} ({type(e).__name__}: {e})"
 
 
+def mcp_url():
+    url = config.get_env("MNEMOBRAIN_GBRAIN_URL")
+    if url.endswith("/health"):
+        return url[: -len("/health")] + "/mcp"
+    return url + "/mcp"
+
+
+def admin_token():
+    tok = os.environ.get("GBRAIN_ADMIN_BOOTSTRAP_TOKEN")
+    if tok:
+        return tok
+    try:
+        return (config.home() / "gbrain-admin.token").read_text().strip() or None
+    except OSError:
+        return None
+
+
+def mcp_auth_check():
+    """POST an MCP initialize against mcp_url; returns (status, detail, fix) or None."""
+    token = admin_token()
+    if token is None:
+        _print(
+            "SKIP",
+            "mcp-auth",
+            "no admin token (set GBRAIN_ADMIN_BOOTSTRAP_TOKEN or <home>/gbrain-admin.token)",
+        )
+        return None
+    url = mcp_url()
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "mnemobrain-doctor", "version": "0.4.1"},
+            },
+        }
+    ).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}",
+    }
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            r.read()
+        return "PASS", f"mcp initialize ok at {url}", ""
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            try:
+                err = json.loads(e.read().decode()).get("error", "invalid_token")
+            except Exception:  # noqa: BLE001
+                err = "invalid_token"
+            return (
+                "FAIL",
+                f"process alive but token rejected ({err})",
+                "mint a fresh admin token / re-run agent register",
+            )
+        return "WARN", f"mcp at {url} returned HTTP {e.code}", ""
+    except Exception as e:  # noqa: BLE001
+        _print(
+            "SKIP",
+            "mcp-auth",
+            f"unreachable ({type(e).__name__}) — liveness check above covers it",
+        )
+        return None
+
+
 def check_python():
     ok = sys.version_info >= (3, 11)
     detail = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -118,6 +189,14 @@ def check_health():
     return _print("FAIL", "gbrain-svc", detail, "run: mnemobrain start gbrain")
 
 
+def check_mcp_auth():
+    res = mcp_auth_check()
+    if res is None:
+        return None
+    status, detail, fix = res
+    return _print(status, "mcp-auth", detail, fix)
+
+
 def check_ollama():
     url = config.get_env("MNEMOBRAIN_OLLAMA_URL")
     model = config.get_env("MNEMOBRAIN_EMBED_MODEL")
@@ -179,6 +258,7 @@ CHECKS = (
     check_gbrain_cfg,
     check_dirs,
     check_health,
+    check_mcp_auth,
     check_ollama,
     check_disk,
     check_pidfile,

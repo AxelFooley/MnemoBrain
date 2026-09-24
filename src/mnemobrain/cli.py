@@ -90,6 +90,25 @@ def cmd_init(args):
     return 0
 
 
+def running_healthy(pidfile):
+    """(healthy, pid, detail): None means not running; bool means a live pid whose /health was probed."""
+    pid = read_pid(pidfile)
+    if pid is None or not deps.pid_alive(pid):
+        return None, pid, "not running"
+    ok, detail = doctor.health_check()
+    return ok, pid, detail
+
+
+def _stop_pid(pid):
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(25):
+        if not deps.pid_alive(pid):
+            break
+        time.sleep(0.2)
+    else:
+        os.kill(pid, signal.SIGKILL)
+
+
 def cmd_start(args):
     bin_path = deps.gbrain_bin()
     if bin_path is None:
@@ -99,10 +118,17 @@ def cmd_start(args):
     d = config.dirs()
     config.init_dirs()
     pidfile = d["services"] / "gbrain.pid"
-    pid = read_pid(pidfile)
-    if pid is not None and deps.pid_alive(pid):
-        verdict(f"gbrain: already running (pid {pid})")
+    healthy, pid, detail = running_healthy(pidfile)
+    if healthy:
+        verdict(f"gbrain: already running (pid {pid}, {detail})")
         return 0
+    if healthy is False:
+        say(
+            f"gbrain: pid {pid} is alive but /health is unreachable ({detail}); "
+            "stopping it and starting fresh"
+        )
+        _stop_pid(pid)
+        pidfile.unlink(missing_ok=True)
     launcher = d["services"] / "run_gbrain.sh"
     config.write_atomic(launcher, render_launcher(bin_path).encode(), executable=True)
     say(f"start: launcher {launcher}")
@@ -115,8 +141,17 @@ def cmd_start(args):
             start_new_session=True,
         )
     pidfile.write_text(f"{proc.pid}\n")
-    verdict(f"gbrain: started (pid {proc.pid}, log {d['logs'] / 'gbrain.log'})")
-    return 0
+    for _ in range(30):
+        ok, detail = doctor.health_check()
+        if ok:
+            verdict(f"gbrain: healthy (pid {proc.pid}, {detail})")
+            return 0
+        time.sleep(0.5)
+    verdict(
+        f"gbrain: started (pid {proc.pid}) but health unhealthy after 15s — "
+        f"check {d['logs'] / 'gbrain.log'}"
+    )
+    return 1
 
 
 def cmd_stop(args):
@@ -126,13 +161,7 @@ def cmd_stop(args):
         pidfile.unlink(missing_ok=True)
         verdict("gbrain: not running")
         return 0
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(25):
-        if not deps.pid_alive(pid):
-            break
-        time.sleep(0.2)
-    else:
-        os.kill(pid, signal.SIGKILL)
+    _stop_pid(pid)
     pidfile.unlink(missing_ok=True)
     verdict(f"gbrain: stopped (pid {pid})")
     return 0

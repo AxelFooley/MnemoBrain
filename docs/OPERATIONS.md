@@ -72,3 +72,31 @@ checkpoint flush). Example: `50 2 * * *`.
 
 Run `mnemosyne doctor`; for GBrain, see docs/UPGRADING.md (reindex BEFORE
 starting `gbrain serve` — the store is single-writer).
+
+## Windows/WSL: when gbrain looks dead (Cursor MCP)
+
+Upstream issue #6: on Windows, Cursor's MCP client can report `mcp_auth`
+errors while the process is fine — or `ERR_CONNECTION_REFUSED` while the CLI
+claims the service is running. A pidfile only proves a process exists, not
+that its listener is alive. Diagnose state before touching anything:
+
+| What you see | Doctor output | Actual state | Fix |
+|---|---|---|---|
+| Cursor auth errors only | `gbrain-svc` PASS | process fine, admin token stale (1h default TTL) | mint a fresh token: `gbrain agent register` (30d default) |
+| Cursor `ERR_CONNECTION_REFUSED` | `gbrain-svc` FAIL | listener dead | `mnemobrain start gbrain` — now stops a wedged live pid and starts fresh, or fails loudly |
+| Doctor PASS everywhere, Cursor dead | all PASS | Cursor-side wiring | check config on the Cursor side; check `<home>/logs/gbrain.log` (no per-line timestamps) and restart |
+
+Decision flow:
+
+1. `GET /health` (127.0.0.1:3131): refused → listener dead, fix the process
+   first (`mnemobrain start gbrain`).
+2. `POST /mcp` an `initialize` JSON-RPC with `Authorization: Bearer <token>`:
+   401 → re-auth (mint a fresh admin token / re-run agent register).
+   200 → process is healthy; check Cursor-side MCP config.
+3. `mnemobrain doctor` reports the two halves separately: `gbrain-svc`
+   (liveness) and `mcp-auth` (token). `mcp-auth` is SKIP when the listener is
+   unreachable — liveness is the real problem then.
+
+Known gap, closed as of this change: `mnemobrain start gbrain` no longer
+trusts a live pid over a dead listener — it health-gates and returns non-zero
+if `/health` is still unreachable 15s after spawn.
