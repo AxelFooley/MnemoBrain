@@ -3,11 +3,16 @@
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 
 from mnemobrain import config
+
+MCP_SMOKE_TIMEOUT = 30  # seconds; a #20-style break exits within ~1s
+MCP_SMOKE_PROBE = "import sys; from mnemosyne.mcp_server import main; main([])"
+_EXTRA_MISSING = re.compile("does not provide the extra", re.IGNORECASE)
 
 MIN_BUN = (1, 3, 11)
 BUN_INSTALL = (
@@ -75,14 +80,73 @@ def gbrain_bin():
     return pathlib.Path(found) if found else None
 
 
+def _pip_install(spec):
+    """Run pip for spec, streaming its output through (never silent)."""
+    r = subprocess.run(
+        [sys.executable, "-m", "pip", "install", spec],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    return r
+
+
+def mcp_smoke():
+    """(ok, detail): spawn the real MCP entry `mnemosyne mcp` with stdin at EOF
+    and verify it starts without import errors (#20). The engine's own error
+    containment reports a broken install only as the opaque
+    'cli_unexpected_failure' at first agent use, so the installer must check
+    itself and surface the engine's real error text instead."""
+    try:
+        r = subprocess.run(
+            [sys.executable, "-c", MCP_SMOKE_PROBE],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=MCP_SMOKE_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return True, f"mcp server still running after {MCP_SMOKE_TIMEOUT}s — no import errors"
+    return (r.returncode == 0, (r.stderr or r.stdout or "").strip())
+
+
 def install_mnemosyne():
     version = config.get_env("MNEMOBRAIN_MNEMOSYNE_VERSION")
-    r = subprocess.run(
-        [sys.executable, "-m", "pip", "install", f"mnemosyne-memory=={version}"], check=False
-    )
+    base = f"mnemosyne-memory=={version}"
+    # Install the [mcp] extra by default (#20): it provides the mcp/anyio
+    # deps the MCP server needs, which a bare install misses (4.0.0b3+ ships
+    # only PyYAML). Pins without the extra degrade to a bare install with a
+    # loud warning line — never silent.
+    r = _pip_install(f"mnemosyne-memory[mcp]=={version}")
+    probed = r.stderr + r.stdout
     if r.returncode != 0:
+        if _EXTRA_MISSING.search(probed):
+            print(
+                f"deps: warning: mnemosyne-memory=={version} defines no [mcp] extra; "
+                "installing bare",
+                file=sys.stderr,
+            )
+            r = _pip_install(base)
+            if r.returncode != 0:
+                raise SystemExit(f"deps: pip install {base} failed (exit {r.returncode})")
+        else:
+            raise SystemExit(
+                f"deps: pip install mnemosyne-memory[mcp]=={version} failed (exit {r.returncode})"
+            )
+    elif _EXTRA_MISSING.search(probed):
+        print(
+            f"deps: warning: mnemosyne-memory=={version} defines no [mcp] extra; "
+            "installed bare — MCP server may be unavailable until it is installed too",
+            file=sys.stderr,
+        )
+    ok, detail = mcp_smoke()
+    if not ok:
         raise SystemExit(
-            f"deps: pip install mnemosyne-memory=={version} failed (exit {r.returncode})"
+            f"deps: post-install mcp smoke check failed:\n{detail}\n"
+            f'deps: verify with: pip install "mnemosyne-memory[mcp]=={version}"'
         )
     return version
 

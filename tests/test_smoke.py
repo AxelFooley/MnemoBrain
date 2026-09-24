@@ -1,10 +1,14 @@
+import contextlib
+import io
 import json
 import os
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
+import types
 import unittest
 import unittest.mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -383,6 +387,97 @@ class TestSessionStartHook(unittest.TestCase):
 
     def test_empty_recall_prints_nothing(self):
         self.assertEqual(self._run(lambda q, top_k=5: []), "")
+
+
+class TestInstallMnemosyne(EnvCase):
+    """deps.install_mnemosyne installs the [mcp] extra (#20), falls back to a
+    bare install for pins that lack it (loud, never silent), and runs a
+    post-install MCP smoke check that fails loudly on a broken install."""
+
+    @staticmethod
+    def _res(returncode=0, stdout="", stderr=""):
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+    def test_installs_mcp_extra_and_runs_smoke(self):
+        ok_extra = self._res(stdout="pip: ok")
+        ok_smoke = self._res(stdout="")
+        with unittest.mock.patch.object(
+            deps.subprocess, "run", side_effect=[ok_extra, ok_smoke]
+        ) as run:
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, "4.0.0b3")
+        self.assertEqual(run.call_count, 2)
+        pip_args = run.call_args_list[0].args[0]
+        self.assertIn(f"mnemosyne-memory[mcp]=={version}", pip_args)
+        smoke_args = run.call_args_list[1].args[0]
+        self.assertEqual(smoke_args[:2], [sys.executable, "-c"])
+        self.assertEqual(run.call_args_list[1].kwargs["stdin"], subprocess.DEVNULL)
+
+    def test_bare_fallback_when_pip_rejects_extra(self):
+        no_extra = self._res(returncode=1, stderr="error: does not provide the extra 'mcp'")
+        bare_ok = self._res()
+        smoke_ok = self._res()
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "3.15.1"
+        err = io.StringIO()
+        with (
+            unittest.mock.patch.object(
+                deps.subprocess, "run", side_effect=[no_extra, bare_ok, smoke_ok]
+            ) as run,
+            contextlib.redirect_stderr(err),
+        ):
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, "3.15.1")
+        self.assertEqual(run.call_args_list[1].args[0][4], "mnemosyne-memory==3.15.1")
+        self.assertIn("defines no [mcp] extra", err.getvalue())
+
+    def test_warning_when_pip_warns_unknown_extra_but_exits_zero(self):
+        warned = self._res(
+            stderr="WARNING: mnemosyne-memory 3.15.1 does not provide the extra 'mcp'"
+        )
+        smoke_ok = self._res()
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "3.15.1"
+        err = io.StringIO()
+        with (
+            unittest.mock.patch.object(
+                deps.subprocess, "run", side_effect=[warned, smoke_ok]
+            ) as run,
+            contextlib.redirect_stderr(err),
+        ):
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, "3.15.1")
+        self.assertEqual(run.call_count, 2)  # no duplicate bare install
+        self.assertIn("defines no [mcp] extra", err.getvalue())
+
+    def test_loud_failure_when_extra_and_bare_both_fail(self):
+        no_extra = self._res(returncode=1, stderr="does not provide the extra 'mcp'")
+        bare_fail = self._res(returncode=1, stderr="ERROR: no matching distribution")
+        with (
+            unittest.mock.patch.object(deps.subprocess, "run", side_effect=[no_extra, bare_fail]),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            deps.install_mnemosyne()
+        self.assertIn("failed (exit 1)", str(ctx.exception))
+
+    def test_smoke_failure_exits_nonzero_with_real_error_text(self):
+        extra_ok = self._res()
+        broken = self._res(
+            returncode=1,
+            stderr="RuntimeError: MCP not installed. Run: pip install mnemosyne-memory[mcp]",
+        )
+        with (
+            unittest.mock.patch.object(deps.subprocess, "run", side_effect=[extra_ok, broken]),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            deps.install_mnemosyne()
+        msg = str(ctx.exception)
+        self.assertIn("post-install mcp smoke check failed", msg)
+        self.assertIn("MCP not installed", msg)
+
+    def test_smoke_timeout_means_server_started(self):
+        extra_ok = self._res()
+        timed_out = subprocess.TimeoutExpired(cmd="mcp-probe", timeout=30)
+        with unittest.mock.patch.object(deps.subprocess, "run", side_effect=[extra_ok, timed_out]):
+            self.assertEqual(deps.install_mnemosyne(), "4.0.0b3")
 
 
 class TestBunLookup(unittest.TestCase):
