@@ -330,18 +330,18 @@ class TestSessionStartHook(unittest.TestCase):
 
     def test_recall_results_are_printed_one_per_line(self):
         memories = [{"content": "User prefers dark mode"}, {"content": "We use bun for gbrain"}]
-        block = self._run(lambda q, limit: list(memories))
+        block = self._run(lambda q, top_k=5: list(memories))
         self.assertIn("- User prefers dark mode", block)
         self.assertIn("- We use bun for gbrain", block)
 
     def test_recall_raising_exits_clean(self):
-        def boom(q, limit):
+        def boom(q, top_k=5):
             raise RuntimeError("no bank")
 
         self.assertEqual(self._run(boom), "")
 
     def test_empty_recall_prints_nothing(self):
-        self.assertEqual(self._run(lambda q, limit: []), "")
+        self.assertEqual(self._run(lambda q, top_k=5: []), "")
 
 
 class TestBunLookup(unittest.TestCase):
