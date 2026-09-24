@@ -2,11 +2,11 @@ name: CodeQL
 
 on:
   push:
-    branches-ignore:
-      - main
+    branches:
+      - dev
   pull_request:
     branches:
-      - main
+      - dev
 
 permissions:
   security-events: write

@@ -25,7 +25,9 @@ All four should pass before you push.
 
 ## What CI enforces
 
-CI runs on every branch except `main`, and on PRs to `main`:
+CI runs on the `dev` branch and on PRs targeting `dev` — that is where all
+quality gates live. PRs from `dev` to `main` run no gates: everything has
+already passed, and a `main` merge is by definition a release.
 
 - **Lint (ruff)** — `ruff check` + `ruff format --check` on `src/` and `tests/`.
 - **Dead code (vulture)** — unused-code scan against the whitelist.
@@ -36,10 +38,14 @@ CI runs on every branch except `main`, and on PRs to `main`:
 
 ## Merge rules
 
-- PRs target `main`.
-- All checks must be green **and** one maintainer approval is required
-  (enforced via branch protection).
-- Direct pushes to `main` are maintainer-only.
+- Feature work happens on feature branches; PRs target `dev`.
+- All checks must be green on the `dev` PR (branch protection enforces this).
+- After merge, `dev` soaks: the reporter tests the fix from `dev`, maintainers
+  dogfood locally. Soak time scales with risk (docs: hours; service lifecycle
+  or engine pins: 1–2 days).
+- Only then does `dev` merge into `main` via PR — a `main` merge always
+  produces a tagged release with published notes.
+- Only maintainers merge into `dev` and `main` (branch protection on both).
 
 ## Scope rules
 
