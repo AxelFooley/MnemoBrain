@@ -4,7 +4,7 @@ Two stdlib-only Python hooks that wire the Mnemosyne reflex loop. Reference
 implementations of the capture policy, not magic.
 
 - `mnemosyne_session_start.py` — recall + inject **only**. Reads the incoming
-  user text, calls `recall(query, limit=5)`, prints a plain-text context block
+  user text, calls `recall(query, top_k=5)`, prints a plain-text context block
   to stdout. Stores nothing, ever.
 - `mnemosyne_end_of_turn.py` — selective capture. Stores the user's message
   **only if** it looks durable (>= 40 chars, matches durable cues like
@@ -23,6 +23,17 @@ default here: neither hook stores the assistant reply.
 `MNEMOSYNE_STORE_TURNS=1` restores store-the-turn behavior (source suffix
 `-turn`) — discouraged, documented, your foot.
 
+## Divergence from upstream (deliberate)
+
+Upstream's autosave (`sync_turn`) stores **all user turns** unfiltered — its
+default (`sync_roles=["user"]`) exists to keep assistant transcript noise out,
+not to judge user content; consolidation is left to sort signal from noise.
+These hooks keep that assistant exclusion and add one more layer: user text
+must also pass the durable-content filter above. That filter is MnemoBrain's
+design choice (#12 showed why we prefer not to store the noise at all), not a
+correction of upstream. If you prefer upstream's simpler policy, wire
+`sync_turn` directly instead of these hooks.
+
 ## Wiring
 
 | Hook event | Your client | Script |
@@ -39,20 +50,25 @@ mnemosyne-memory installed — the same one where
 
 ## Cleaning an already-flooded bank
 
-Concretely, list memories whose source matches your turn-storer
-(`mnemosyne-browser` or `mnemosyne list`), then forget each:
+`recall()` is query-driven and can't enumerate a bank, and `get_all_memories()`
+is scoped to the calling session — for a sweep you want direct SQL over the
+store, then the module-level `forget()`:
 
 ```python
+import sqlite3
 from mnemosyne.core.memory import forget
-from mnemosyne import recall
 
-for mem in recall("", limit=200):
-    if mem.get("source", "").endswith("-turn") or mem.get("source") == "your-turn-storer":
-        forget(mem["id"])
+DB = "<MNEMOSYNE_DATA_DIR>/mnemosyne.db"  # print via: mnemobrain env
+con = sqlite3.connect(DB)
+ids = con.execute(
+    "SELECT id FROM working_memory WHERE source LIKE '%-turn' OR source = 'your-turn-storer'"
+).fetchall()
+for (mem_id,) in ids:
+    forget(mem_id)
 ```
 
-Run `mnemosyne sleep` consolidation afterwards so recency scores settle
-(docs/OPERATIONS.md Job 3).
+If consolidation already ran, sweep `episodic_memory` the same way. Then run
+`mnemosyne sleep` so recency scores settle (docs/OPERATIONS.md Job 3).
 
 ## Retention
 
