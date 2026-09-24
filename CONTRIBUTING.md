@@ -29,6 +29,16 @@ CI runs on the `dev` branch and on PRs targeting `dev` — that is where all
 quality gates live. PRs from `dev` to `main` run no gates: everything has
 already passed, and a `main` merge is by definition a release.
 
+- **Docs-only fast path** — when a PR touches only `.md`/`.rst`/`.txt` files or
+  the `docs/` directory, the code gates below (lint, dead code, integration,
+  CodeQL) are skipped automatically; required checks count as success so
+  branch protection stays intact.
+- **Prompt-injection scan** — runs on EVERY PR and every push to `dev`/`main`,
+  over ALL files, and is never skipped: documentation and any file an AI agent
+  reads are an attack surface, so agent-facing instructions are scanned for
+  hidden unicode, homoglyphs, LLM delimiters, and direct-injection phrasings.
+  Run locally with `python scripts/check_prompt_injection.py --self-test`
+  then `python scripts/check_prompt_injection.py .`
 - **Lint (ruff)** — `ruff check` + `ruff format --check` on `src/` and `tests/`.
 - **Dead code (vulture)** — unused-code scan against the whitelist.
 - **Integration** — a clean-runner end-to-end pass: real `pip install -e .`,
