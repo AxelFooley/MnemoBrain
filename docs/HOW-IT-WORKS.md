@@ -30,12 +30,21 @@ There are three ways to wire Mnemosyne in:
 1. **Framework hook.** Agent frameworks with a pre-LLM hook call Mnemosyne
    before every model call: the hook passes the user's message, Mnemosyne
    recalls relevant memories and returns a context block the framework injects
-   into the prompt; recall/injection happens every turn, but storage is
-   selective — durable user-side content or explicit agent decisions, never
-   raw assistant replies (see hooks/README.md for the reference policy and
-   #12 for why turn-flooding poisons recall). Upstream ships
-   integration docs (claude-code, codex, cursor, windsurf) for its
-   `mnemosyne-install` entry point; NOTE: on mnemosyne-memory <= 3.15.x
+   into the prompt. Recall/injection happens every turn; storage is a separate
+   matter with two layers:
+
+   - **Upstream default:** upstream's own autosave (`sync_turn`) stores **user
+     turns only** — assistant replies are excluded by design ("avoids
+     assistant transcript noise"). Wiring that stores every agent reply
+     overrides this and floods working memory within minutes (#12).
+   - **MnemoBrain reference hooks (stricter, deliberate divergence):**
+     user-side text must additionally pass a durable-content filter
+     (`qualifies()` in hooks/mnemosyne_end_of_turn.py) before anything is
+     stored at all. This is our design choice, not a correction of upstream —
+     see hooks/README.md for the full divergence note.
+
+   Upstream ships integration docs (claude-code, codex, cursor, windsurf) for
+   its `mnemosyne-install` entry point; NOTE: on mnemosyne-memory <= 3.15.x
    `mnemosyne-install --help` runs the installer instead of printing help
    (upstream bug) — prefer the upstream docs until that ships.
 2. **Direct SDK.** For your own code:
