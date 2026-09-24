@@ -8,7 +8,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from mnemobrain import config, deps
+from mnemobrain import __version__, config, deps
 
 TIMEOUT = 2
 
@@ -69,7 +69,7 @@ def mcp_auth_check():
             "params": {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "mnemobrain-doctor", "version": "0.4.1"},
+                "clientInfo": {"name": "mnemobrain-doctor", "version": __version__},
             },
         }
     ).encode()
