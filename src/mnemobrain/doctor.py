@@ -129,10 +129,13 @@ def check_mnemosyne():
             "FAIL",
             "mnemosyne",
             "mnemosyne-memory not importable in this interpreter",
-            f"activate the venv from scripts/install.sh; pip install mnemosyne-memory=={pin}",
+            f'activate the venv from scripts/install.sh; pip install "mnemosyne-memory[mcp]=={pin}"',
         )
     return _print(
-        "FAIL", "mnemosyne", f"found {found}, pinned {pin}", f"pip install mnemosyne-memory=={pin}"
+        "FAIL",
+        "mnemosyne",
+        f"found {found}, pinned {pin}",
+        f'pip install "mnemosyne-memory[mcp]=={pin}"',
     )
 
 
