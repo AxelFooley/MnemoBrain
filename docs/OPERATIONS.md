@@ -100,3 +100,13 @@ Decision flow:
 Known gap, closed as of this change: `mnemobrain start gbrain` no longer
 trusts a live pid over a dead listener — it health-gates and returns non-zero
 if `/health` is still unreachable 60s after spawn.
+
+## Windows/WSL: `ollama_url` points at a moving target (issue #12 side-bug)
+
+The generated `ollama_url` may point at the WSL NAT gateway IP (172.x), which
+changes on reboot and leaves gbrain's embedder unreachable. Two rules:
+
+- Prefer WSL mirrored networking (Windows 11: `networkingMode=mirrored` in
+  `.wslconfig`) so `127.0.0.1:11434` works.
+- If you must use `OLLAMA_HOST=0.0.0.0` on the Windows host, firewall it — it
+  listens LAN-wide.

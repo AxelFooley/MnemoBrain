@@ -10,8 +10,14 @@ import unittest.mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "hooks"))
 
-from mnemobrain import cli, config, doctor
+import mnemosyne_end_of_turn as eot
+import mnemosyne_session_start as ss
+
+from mnemobrain import cli, config, deps, doctor
+
+DURABLE_MSG = "We use bun instead of node for everything in this repository now, always"
 
 
 class EnvCase(unittest.TestCase):
@@ -246,6 +252,151 @@ class TestRunningHealthy(EnvCase):
         self.assertIsNone(healthy)
         self.assertIsNone(pid)
         self.assertEqual(detail, "not running")
+
+
+class TestEndOfTurnPolicy(unittest.TestCase):
+    def test_durable_user_message_qualifies(self):
+        self.assertTrue(eot.qualifies(DURABLE_MSG))
+        self.assertTrue(
+            eot.qualifies("Actually the timeout must be 30 seconds, not 10 - always use 30")
+        )
+
+    def test_issue12_chatter_samples_are_rejected(self):
+        for line in (
+            "the test will finish around 13:25, please wait for it",
+            "here is the list of saved sessions from this morning, take a look when ready",
+            "you can close the window now, the job keeps running in the background",
+        ):
+            self.assertFalse(eot.qualifies(line), line)
+
+    def test_short_strings_are_rejected(self):
+        self.assertFalse(eot.qualifies(""))
+        self.assertFalse(eot.qualifies("ok"))
+
+    def test_assistant_only_is_none_by_policy(self):
+        os.environ.pop("MNEMOSYNE_STORE_TURNS", None)
+        self.assertIsNone(
+            eot.decide("", "Sure, I finished the refactor and every test passes now.")
+        )
+
+    def test_escape_hatch_stores_assistant_text(self):
+        os.environ["MNEMOSYNE_STORE_TURNS"] = "1"
+        try:
+            self.assertEqual(eot.decide("", "assistant reply text"), "assistant reply text")
+        finally:
+            os.environ.pop("MNEMOSYNE_STORE_TURNS", None)
+
+
+class TestEndOfTurnStore(EnvCase):
+    def test_store_uses_conservative_defaults(self):
+        captured = {}
+
+        def fake_remember(text, source=None, importance=None, scope=None, metadata=None):
+            captured.update(
+                text=text, source=source, importance=importance, scope=scope, metadata=metadata
+            )
+            return "mem-1"
+
+        with unittest.mock.patch.object(eot, "get_remember", return_value=fake_remember):
+            eot.store(DURABLE_MSG, "agent-hook")
+        self.assertEqual(captured["importance"], 0.5)
+        self.assertEqual(captured["scope"], "session")
+        self.assertEqual(captured["source"], "agent-hook")
+        self.assertIn("auto", captured["metadata"])
+
+    def test_turn_suffix_on_source(self):
+        captured = {}
+
+        def fake_remember(text, source=None, **kwargs):
+            captured["source"] = source
+
+        with unittest.mock.patch.object(eot, "get_remember", return_value=fake_remember):
+            eot.store("x", "agent-hook", turn=True)
+        self.assertEqual(captured["source"], "agent-hook-turn")
+
+
+class TestSessionStartHook(unittest.TestCase):
+    def _run(self, get_recall):
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with (
+            unittest.mock.patch.object(ss, "get_recall", return_value=get_recall),
+            contextlib.redirect_stdout(out),
+        ):
+            ss.main(["ss.py", "user preferences"])
+        return out.getvalue()
+
+    def test_recall_results_are_printed_one_per_line(self):
+        memories = [{"content": "User prefers dark mode"}, {"content": "We use bun for gbrain"}]
+        block = self._run(lambda q, limit: list(memories))
+        self.assertIn("- User prefers dark mode", block)
+        self.assertIn("- We use bun for gbrain", block)
+
+    def test_recall_raising_exits_clean(self):
+        def boom(q, limit):
+            raise RuntimeError("no bank")
+
+        self.assertEqual(self._run(boom), "")
+
+    def test_empty_recall_prints_nothing(self):
+        self.assertEqual(self._run(lambda q, limit: []), "")
+
+
+class TestBunLookup(unittest.TestCase):
+    def _fake_bun(self, home, contents="echo 1.2.3"):
+        bin_dir = pathlib.Path(home) / ".bun" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        fake = bin_dir / "bun"
+        fake.write_text(f"#!/bin/sh\n{contents}\n")
+        fake.chmod(0o755)
+        return fake
+
+    def test_home_fallback_when_path_misses(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._fake_bun(td, "echo 1.3.11")
+            env = dict(os.environ, PATH="")
+            with (
+                unittest.mock.patch.object(
+                    deps.pathlib.Path, "home", return_value=pathlib.Path(td)
+                ),
+                unittest.mock.patch.dict(os.environ, env, clear=True),
+            ):
+                self.assertEqual(deps.bun_version(), (1, 3, 11))
+
+    def test_which_hit_wins_over_home_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._fake_bun(td, "echo 1.2.3")
+            on_path = pathlib.Path(td, "bun-on-path")
+            on_path.write_text("#!/bin/sh\necho 9.9.9\n")
+            on_path.chmod(0o755)
+            env = dict(os.environ, PATH=str(td))
+            with (
+                unittest.mock.patch.object(deps.shutil, "which", return_value=str(on_path)),
+                unittest.mock.patch.object(
+                    deps.pathlib.Path, "home", return_value=pathlib.Path(td)
+                ),
+                unittest.mock.patch.dict(os.environ, env, clear=True),
+            ):
+                self.assertEqual(deps.bun_version(), (9, 9, 9))
+
+    def test_missing_everywhere_is_none(self):
+        with tempfile.TemporaryDirectory() as td:
+            env = dict(os.environ, PATH="")
+            with (
+                unittest.mock.patch.object(
+                    deps.pathlib.Path, "home", return_value=pathlib.Path(td)
+                ),
+                unittest.mock.patch.dict(os.environ, env, clear=True),
+            ):
+                self.assertIsNone(deps.bun_version())
+
+    def test_doctor_fix_line_mentions_login_shells(self):
+        with unittest.mock.patch.object(deps, "bun_version", return_value=None):
+            _ok, _detail, fix = deps.check_bun()
+        self.assertIn("~/.bun/bin", fix)
+        self.assertIn("install bun:", fix)
 
 
 if __name__ == "__main__":
