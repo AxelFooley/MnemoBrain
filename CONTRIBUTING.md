@@ -40,9 +40,11 @@ already passed, and a `main` merge is by definition a release.
 
 - Feature work happens on feature branches; PRs target `dev`.
 - All checks must be green on the `dev` PR (branch protection enforces this).
-- After merge, `dev` soaks: the reporter tests the fix from `dev`, maintainers
-  dogfood locally. Soak time scales with risk (docs: hours; service lifecycle
-  or engine pins: 1–2 days).
+- After merge, `dev` soaks: maintainers validate the fix internally on their
+  own stacks first; only then is the reporter invited to test from `dev`.
+  There is no rush — a day or two before answering the reporter is fine.
+  Soak time scales with risk (docs: hours; service lifecycle or engine pins:
+  1–2 days).
 - Only then does `dev` merge into `main` via PR — a `main` merge always
   produces a tagged release with published notes.
 - Only maintainers merge into `dev` and `main` (branch protection on both).
