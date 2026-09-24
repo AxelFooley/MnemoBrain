@@ -4,22 +4,27 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
+import unittest.mock
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
-from mnemobrain import cli, config
+from mnemobrain import cli, config, doctor
 
 
 class EnvCase(unittest.TestCase):
     def setUp(self):
-        self._saved = {k: os.environ.get(k) for k in os.environ if k.startswith("MNEMOBRAIN_")}
+        self._saved = {
+            k: os.environ.get(k) for k in os.environ if k.startswith(("MNEMOBRAIN_", "GBRAIN_"))
+        }
         self.home = pathlib.Path(tempfile.mkdtemp(prefix="mbtest-"))
         os.environ["MNEMOBRAIN_HOME"] = str(self.home)
 
     def tearDown(self):
         shutil.rmtree(self.home, ignore_errors=True)
-        for k in [k for k in os.environ if k.startswith("MNEMOBRAIN_")]:
+        for k in [k for k in os.environ if k.startswith(("MNEMOBRAIN_", "GBRAIN_"))]:
             os.environ.pop(k, None)
         for k, v in self._saved.items():
             if v is not None:
@@ -121,6 +126,126 @@ class TestGbrainConfig(EnvCase):
         data = json.loads(self.path().read_text())
         self.assertEqual(data["embedding_model"], "text-embedding-3-small")
         self.assertEqual(data["embedding_dimensions"], 1536)
+
+
+class _Handler(BaseHTTPRequestHandler):
+    code = 200
+
+    def _respond(self):
+        body = json.dumps({"status": "ok"}).encode()
+        self.send_response(self.code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_POST = _respond
+    do_GET = _respond
+
+    def log_message(self, format, *args):
+        pass
+
+
+def _post_handler(code, body):
+    class H(_Handler):
+        pass
+
+    H.code = code
+    return H
+
+
+class McpServerCase(EnvCase):
+    def setUp(self):
+        super().setUp()
+        self.server = HTTPServer(("127.0.0.1", 0), self.handler_class())
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        os.environ["MNEMOBRAIN_GBRAIN_URL"] = f"http://127.0.0.1:{self.port}/mcp"
+        os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = "dummy-token"
+
+    def handler_class(self):
+        return _Handler
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        super().tearDown()
+
+
+class TestMcpUrl(EnvCase):
+    def test_default_url_becomes_mcp(self):
+        self.assertEqual(
+            doctor.mcp_url(),
+            "http://127.0.0.1:3131/mcp",
+        )
+
+    def test_url_ending_health_is_replaced(self):
+        os.environ["MNEMOBRAIN_GBRAIN_URL"] = "http://127.0.0.1:4000/health"
+        self.assertEqual(doctor.mcp_url(), "http://127.0.0.1:4000/mcp")
+
+    def test_url_not_ending_health_gets_mcp_appended(self):
+        os.environ["MNEMOBRAIN_GBRAIN_URL"] = "http://127.0.0.1:4000"
+        self.assertEqual(doctor.mcp_url(), "http://127.0.0.1:4000/mcp")
+
+
+class TestAdminToken(EnvCase):
+    def test_env_wins_over_file(self):
+        os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = "envtok"
+        (self.home / "gbrain-admin.token").write_text("filetok\n")
+        self.assertEqual(doctor.admin_token(), "envtok")
+
+    def test_file_fallback_read_and_stripped(self):
+        (self.home / "gbrain-admin.token").write_text("  filetok  \n")
+        self.assertEqual(doctor.admin_token(), "filetok")
+
+    def test_missing_everything_is_none(self):
+        self.assertIsNone(doctor.admin_token())
+
+
+class TestMcpAuthCheck(McpServerCase):
+    def test_200_is_pass(self):
+        self.assertEqual(doctor.mcp_auth_check()[0], "PASS")
+
+    def test_401_is_fail(self):
+        self.server.RequestHandlerClass = _post_handler(401, {})
+        status, detail, _fix = doctor.mcp_auth_check()
+        self.assertEqual(status, "FAIL")
+        self.assertIn("token rejected", detail)
+        self.assertIn("invalid_token", detail)
+
+    def test_server_down_is_none(self):
+        os.environ["MNEMOBRAIN_GBRAIN_URL"] = f"http://127.0.0.1:{self.port + 1}/mcp"
+        self.assertIsNone(doctor.mcp_auth_check())
+
+
+class TestRunningHealthy(EnvCase):
+    def pidfile(self, pid):
+        d = self.home / "services"
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / "gbrain.pid"
+        p.write_text(f"{pid}\n")
+        return p
+
+    def test_healthy_pid_is_true(self):
+        with unittest.mock.patch.object(doctor, "health_check", return_value=(True, "ok at url")):
+            healthy, pid, detail = cli.running_healthy(self.pidfile(os.getpid()))
+        self.assertTrue(healthy)
+        self.assertEqual(pid, os.getpid())
+        self.assertEqual(detail, "ok at url")
+
+    def test_unhealthy_pid_is_false(self):
+        with unittest.mock.patch.object(
+            doctor, "health_check", return_value=(False, "unreachable")
+        ):
+            healthy, _pid, detail = cli.running_healthy(self.pidfile(os.getpid()))
+        self.assertFalse(healthy)
+        self.assertEqual(detail, "unreachable")
+
+    def test_missing_pidfile_is_none(self):
+        healthy, pid, detail = cli.running_healthy(self.home / "services" / "gbrain.pid")
+        self.assertIsNone(healthy)
+        self.assertIsNone(pid)
+        self.assertEqual(detail, "not running")
 
 
 if __name__ == "__main__":
