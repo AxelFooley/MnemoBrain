@@ -48,7 +48,7 @@ Verification: `./.venv/bin/mnemobrain -h` prints usage and exits 0.
 ./.venv/bin/mnemobrain install
 ```
 
-What it does: verifies bun >= 1.3.11; pip-installs `mnemosyne-memory==3.15.1`
+What it does: verifies bun >= 1.3.11; pip-installs `mnemosyne-memory==4.0.0b3`
 into the venv; `bun add github:garrytan/gbrain#v0.50.0.0 --ignore-scripts`
 into `$MNEMOBRAIN_HOME`; creates the data layout; writes the defaults config
 and gbrain's `.gbrain/config.json` (create-if-absent).

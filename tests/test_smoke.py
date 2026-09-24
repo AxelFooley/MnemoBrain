@@ -61,7 +61,7 @@ class TestConfigWriter(EnvCase):
     def test_parse_roundtrip(self):
         config.write_config()
         parsed = config.parse_config(self.path().read_text())
-        self.assertEqual(parsed["mnemosyne_version"], "3.15.1")
+        self.assertEqual(parsed["mnemosyne_version"], "4.0.0b3")
         self.assertEqual(parsed["gbrain_ref"], "v0.50.0.0")
         self.assertEqual(parsed["gbrain_url"], "http://127.0.0.1:3131/health")
 

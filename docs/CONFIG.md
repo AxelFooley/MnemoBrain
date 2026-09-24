@@ -16,7 +16,7 @@ the pin/port/model and re-run `mnemobrain init` to persist new values.
 |---|---|---|
 | `MNEMOBRAIN_HOME` | `~/.mnemobrain` | root for all state: bins, services, config, data, logs |
 | `MNEMOBRAIN_GBRAIN_REF` | `v0.50.0.0` | git ref of `github:garrytan/gbrain` installed by `bun add` |
-| `MNEMOBRAIN_MNEMOSYNE_VERSION` | `3.15.1` | PyPI pin for `mnemosyne-memory` |
+| `MNEMOBRAIN_MNEMOSYNE_VERSION` | `4.0.0b3` | PyPI pin for `mnemosyne-memory` |
 | `MNEMOBRAIN_GBRAIN_PORT` | `3131` | port the GBrain HTTP service binds |
 | `MNEMOBRAIN_GBRAIN_URL` | `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT/health` | health endpoint checked by `doctor`/`status` |
 | `MNEMOBRAIN_OLLAMA_URL` | `http://localhost:11434/v1` | OpenAI-compatible embeddings base URL |
@@ -54,7 +54,7 @@ dependency). Keys are the variable names minus the `MNEMOBRAIN_` prefix, lowerca
 ```yaml
 # mnemobrain stack defaults. Process env overrides these values.
 gbrain_ref: v0.50.0.0
-mnemosyne_version: 3.15.1
+mnemosyne_version: 4.0.0b3
 gbrain_port: 3131
 gbrain_url: http://127.0.0.1:3131/health
 ollama_url: http://localhost:11434/v1
