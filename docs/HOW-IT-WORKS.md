@@ -30,11 +30,23 @@ There are three ways to wire Mnemosyne in:
 1. **Framework hook.** Agent frameworks with a pre-LLM hook call Mnemosyne
    before every model call: the hook passes the user's message, Mnemosyne
    recalls relevant memories and returns a context block the framework injects
-   into the prompt; the same cycle stores the turn afterwards. The provider
-   exposes `prefetch(query, session_id)` for exactly this. Mnemosyne upstream
-   ships integration docs (claude-code, codex,
-   cursor, windsurf) via its `mnemosyne-install` entry point — see
-   `mnemosyne-install --help` and the upstream docs.
+   into the prompt. Recall/injection happens every turn; storage is a separate
+   matter with two layers:
+
+   - **Upstream default:** upstream's own autosave (`sync_turn`) stores **user
+     turns only** — assistant replies are excluded by design ("avoids
+     assistant transcript noise"). Wiring that stores every agent reply
+     overrides this and floods working memory within minutes (#12).
+   - **MnemoBrain reference hooks (stricter, deliberate divergence):**
+     user-side text must additionally pass a durable-content filter
+     (`qualifies()` in hooks/mnemosyne_end_of_turn.py) before anything is
+     stored at all. This is our design choice, not a correction of upstream —
+     see hooks/README.md for the full divergence note.
+
+   Upstream ships integration docs (claude-code, codex, cursor, windsurf) for
+   its `mnemosyne-install` entry point; NOTE: on mnemosyne-memory <= 3.15.x
+   `mnemosyne-install --help` runs the installer instead of printing help
+   (upstream bug) — prefer the upstream docs until that ships.
 2. **Direct SDK.** For your own code:
 
    ```python
@@ -92,7 +104,9 @@ MnemoBrain adds is install, config, launch, and health checks.
 User message arrives → the pre-LLM hook recalls matching Mnemosyne memories →
 the returned context block is injected into the prompt → the agent answers,
 and may query gbrain for deliberate knowledge ("what do we know about this
-repo's release process?") → the turn is stored to Mnemosyne automatically →
-anything durable the agent explicitly writes down lands as a gbrain page. The
-reflex loop carries the conversation; the deliberate loop accumulates what is
-worth keeping.
+repo's release process?") → durable-looking user input and explicit agent
+decisions are stored to Mnemosyne (selectively —
+hooks/mnemosyne_end_of_turn.py is the reference policy; the raw assistant
+reply is never stored) → anything durable the agent explicitly writes down
+lands as a gbrain page. The reflex loop carries the conversation; the
+deliberate loop accumulates what is worth keeping.

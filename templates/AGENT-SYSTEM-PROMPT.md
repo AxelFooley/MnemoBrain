@@ -26,6 +26,9 @@ happen automatically — your job is the capture side. When wiring manually:
 
 - Before answering from memory, check it: `recall("<topic>", limit=5)`.
 - After a turn that produced anything in the capture list, store immediately.
+- If you installed the MnemoBrain reference hooks (hooks/README.md), recall
+  and selective capture run automatically — do not ALSO store every turn
+  manually.
 
 ## Capture policy
 

@@ -10,7 +10,37 @@ import sys
 from mnemobrain import config
 
 MIN_BUN = (1, 3, 11)
-BUN_INSTALL = "curl -fsSL https://bun.sh/install | bash"
+BUN_INSTALL = (
+    "curl -fsSL https://bun.sh/install | bash  (and ensure ~/.bun/bin is "
+    "exported in ~/.profile for login shells)"
+)
+
+
+def bun_bin():
+    """Locate bun: PATH first, then the default install dir (WSL login shells
+    that do not read .bashrc otherwise produce a false "not found")."""
+    found = shutil.which("bun")
+    if found:
+        return pathlib.Path(found)
+    fallback = pathlib.Path.home() / ".bun" / "bin" / "bun"
+    if fallback.is_file() and os.access(fallback, os.X_OK):
+        return fallback
+    return None
+
+
+def bun_version():
+    bun = bun_bin()
+    if bun is None:
+        return None
+    r = subprocess.run([str(bun), "--version"], capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        return None
+    try:
+        return version_tuple(r.stdout)
+    except ValueError:
+        return None
+
+
 GBRAIN_REPO = "github:garrytan/gbrain"
 
 
@@ -22,18 +52,6 @@ def version_tuple(text):
             raise ValueError(f"unparseable version: {text!r}")
         parts.append(int(digits))
     return tuple(parts)
-
-
-def bun_version():
-    if not shutil.which("bun"):
-        return None
-    r = subprocess.run(["bun", "--version"], capture_output=True, text=True, check=False)
-    if r.returncode != 0:
-        return None
-    try:
-        return version_tuple(r.stdout)
-    except ValueError:
-        return None
 
 
 def check_bun():
