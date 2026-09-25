@@ -11,7 +11,7 @@ import tempfile
 
 DEFAULTS = {
     "MNEMOBRAIN_HOME": "~/.mnemobrain",
-    "MNEMOBRAIN_GBRAIN_REF": "v0.50.0.0",
+    "MNEMOBRAIN_GBRAIN_REF": "v0.54.1.1",
     "MNEMOBRAIN_MNEMOSYNE_VERSION": "4.0.0b3",
     "MNEMOBRAIN_GBRAIN_PORT": "3131",
     "MNEMOBRAIN_GBRAIN_URL": "",  # derived from MNEMOBRAIN_GBRAIN_PORT, see default_value()

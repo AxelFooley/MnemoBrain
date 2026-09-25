@@ -73,7 +73,7 @@ class TestConfigWriter(EnvCase):
         config.write_config()
         parsed = config.parse_config(self.path().read_text())
         self.assertEqual(parsed["mnemosyne_version"], "4.0.0b3")
-        self.assertEqual(parsed["gbrain_ref"], "v0.50.0.0")
+        self.assertEqual(parsed["gbrain_ref"], "v0.54.1.1")
         self.assertEqual(parsed["gbrain_url"], "http://127.0.0.1:3131/health")
 
 
