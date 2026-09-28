@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import pathlib
@@ -107,6 +109,35 @@ class TestEnvLines(EnvCase):
         self.assertIn(f'export MNEMOSYNE_DATA_DIR="{self.home}/data/mnemosyne"', text)
         self.assertNotIn("GBRAIN_" + "HOME", text)
         self.assertNotIn("MNEMOSYNE_" + "HOME", text)
+
+
+class TestGbrainVersionCheck(EnvCase):
+    def pkg_dir(self):
+        d = self.home / "node_modules" / "gbrain"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def test_version_match_passes(self):
+        os.environ["MNEMOBRAIN_GBRAIN_REF"] = "v0.54.1"
+        (self.pkg_dir() / "package.json").write_text(json.dumps({"version": "0.54.1"}))
+        self.assertEqual(doctor.check_gbrain_version(), "PASS")
+
+    def test_version_mismatch_fails_with_bun_lock_fix(self):
+        os.environ["MNEMOBRAIN_GBRAIN_REF"] = "v0.54.1.1"
+        (self.pkg_dir() / "package.json").write_text(json.dumps({"version": "0.53.0"}))
+        result = io.StringIO()
+        with contextlib.redirect_stderr(result):
+            status = doctor.check_gbrain_version()
+        self.assertEqual(status, "FAIL")
+        self.assertIn("bun.lock", result.getvalue())
+
+    def test_sha_like_ref_is_skip(self):
+        os.environ["MNEMOBRAIN_GBRAIN_REF"] = "a" * 40
+        (self.pkg_dir() / "package.json").write_text(json.dumps({"version": "0.54.1"}))
+        self.assertEqual(doctor.check_gbrain_version(), "SKIP")
+
+    def test_no_install_returns_none(self):
+        self.assertIsNone(doctor.check_gbrain_version())
 
 
 class TestGbrainConfig(EnvCase):
