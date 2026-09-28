@@ -1,13 +1,24 @@
-"""CLI: install, init, start/stop/status gbrain, doctor, env."""
+"""CLI: install, init, start/stop/status gbrain, doctor, env, rethink, retain."""
 
 import argparse
+import datetime
+import json
 import os
+import pathlib
+import re
 import signal
 import subprocess
 import sys
 import time
 
 from mnemobrain import __version__, config, deps, doctor
+
+RETHINK_STALE_DAYS = 30
+RETHINK_LIMIT = 10
+RETHINK_SCAN = 1000  # generous scan; gbrain list is sorted updated_asc (staleness order)
+
+ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?")
+LIST_HEADER_WORDS = {"slug", "title", "name", "updated", "updated_at", "age", "words"}
 
 
 def say(msg):
@@ -176,13 +187,202 @@ def cmd_status(args):
     return 0 if alive and ok else 1
 
 
-def cmd_doctor(args):
-    return doctor.run()
-
-
 def cmd_env(args):
     print("\n".join(config.env_lines()))
     return 0
+
+
+def _parse_iso(text):
+    """ISO timestamp -> aware UTC datetime, or None."""
+    try:
+        dt = datetime.datetime.fromisoformat(text.strip())
+    except (ValueError, AttributeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.UTC)
+    return dt.astimezone(datetime.UTC)
+
+
+def _parse_gbrain_list(text):
+    """`gbrain list` output -> [(slug, updated_at ISO), ...] in output order.
+
+    Tolerates both JSON lines and the plain table: the ISO timestamp in a row
+    is updated_at, the first non-header token outside it is the slug.
+    """
+    pages = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("{"):
+            try:
+                row = json.loads(line)
+                slug = row.get("slug") or row.get("name")
+                updated = row.get("updated_at") or row.get("updated")
+                if slug and updated and _parse_iso(str(updated)):
+                    pages.append((str(slug), str(updated)))
+            except ValueError:
+                pass
+            continue
+        match = ISO_TS.search(line)
+        if not match:
+            continue
+        rest = line[: match.start()] + line[match.end() :]
+        tokens = [t for t in re.split(r"[|\s]+", rest) if t]
+        slug = next((t for t in tokens if t.lower() not in LIST_HEADER_WORDS), None)
+        if slug:
+            pages.append((slug, match.group(0).replace(" ", "T")))
+    return pages
+
+
+def render_rethink_request(slug, updated_at, stale_days, requested_at):
+    return "\n".join(
+        [
+            f"# rethink: {slug}",
+            f"stale_since: {updated_at}",
+            f"requested: {requested_at}",
+            f"reason: page not updated in {stale_days} days",
+            "instructions: |",
+            "  Read the page (gbrain get <slug> --include-content), check it against recent",
+            "  memories (mnemosyne recall <topic keywords>), and rewrite it if the content",
+            "  is outdated. Delete the request file when done.",
+            "",
+        ]
+    )
+
+
+def _request_slug(path):
+    """Read back the slug from a request file's heading; None if not one."""
+    try:
+        first = path.read_text().split("\n", 1)[0]
+    except OSError:
+        return None
+    prefix = "# rethink: "
+    return first[len(prefix) :].strip() if first.startswith(prefix) else None
+
+
+def _gbrain_env():
+    """HOME isolation is what scopes gbrain to this stack; PATH inherited."""
+    return {"HOME": str(config.home()), "PATH": os.environ.get("PATH", os.defpath)}
+
+
+def cmd_rethink(args):
+    bin_path = deps.gbrain_bin()
+    if bin_path is None:
+        verdict("rethink: gbrain not installed")
+        say("fix: run mnemobrain install")
+        return 1
+    pidfile = config.dirs()["services"] / "gbrain.pid"
+    healthy, pid, detail = running_healthy(pidfile)
+    if healthy is not None:
+        verdict("rethink: refused — gbrain service is running (writes are single-writer)")
+        say(f"fix: mnemobrain stop gbrain first (pid {pid}, {detail}), or use MCP instead")
+        return 1
+    r = subprocess.run(
+        [
+            str(bin_path),
+            "list",
+            "--sort",
+            "updated_asc",
+            "--limit",
+            str(RETHINK_SCAN),
+            "--offset",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_gbrain_env(),
+    )
+    pages = _parse_gbrain_list(r.stdout)
+    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=args.stale_days)
+    stale = [(slug, updated) for slug, updated in pages if (_parse_iso(updated) or cutoff) < cutoff]
+    stale_slugs = {slug for slug, _ in stale}
+    rethink_dir = config.home() / "rethink"
+    rethink_dir.mkdir(parents=True, exist_ok=True)
+    for path in rethink_dir.glob("*.md"):
+        slug = _request_slug(path)
+        if slug is None or slug not in stale_slugs:
+            path.unlink(missing_ok=True)  # page refreshed or gone; self-clean
+    now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+    queued = []
+    epoch = datetime.datetime.min.replace(tzinfo=datetime.UTC)
+    for slug, updated in sorted(stale, key=lambda p: _parse_iso(p[1]) or epoch)[
+        : max(args.limit, 0)
+    ]:
+        request_file = rethink_dir / f"{slug.replace('/', '__')}.md"
+        config.write_atomic(
+            request_file,
+            render_rethink_request(slug, updated, args.stale_days, now).encode(),
+        )
+        queued.append({"slug": slug, "updated_at": updated, "request_file": str(request_file)})
+    if args.json:
+        print(json.dumps(queued, indent=2))
+        return 0
+    verdict(
+        f"rethink: {len(stale)} stale pages (queued {len(queued)} request files in {rethink_dir})"
+    )
+    return 0
+
+
+def cmd_retain(args):
+    text = args.text
+    if not text and not sys.stdin.isatty():
+        try:
+            text = sys.stdin.read()
+        except (OSError, ValueError):
+            text = ""
+    text = (text or "").strip()
+    if not text:
+        say(
+            "usage: mnemobrain retain [--importance F] [--source S] [--scope S]"
+            " [--metadata JSON] [text]   (or pipe text on stdin)"
+        )
+        return 1
+    metadata = None
+    if args.metadata is not None:
+        try:
+            metadata = json.loads(args.metadata)
+        except ValueError:
+            verdict("retain: FAILED")
+            say(f"retain: --metadata is not valid JSON: {args.metadata}")
+            say('fix: pass a JSON object, e.g. --metadata \'{"topic": "releases"}\'')
+            return 1
+    try:
+        from mnemosyne.core.banks import BankManager
+        from mnemosyne.core.memory import Mnemosyne
+    except ImportError:
+        verdict("retain: FAILED")
+        say("retain: mnemosyne-memory not importable in this interpreter")
+        say(
+            "fix: activate the venv (scripts/install.sh); "
+            f"pip install mnemosyne-memory=={config.get_env('MNEMOBRAIN_MNEMOSYNE_VERSION')}"
+        )
+        return 1
+    data_dir = pathlib.Path(os.environ.get("MNEMOSYNE_DATA_DIR") or config.dirs()["mnemosyne_data"])
+    bank = os.environ.get("MNEMOSYNE_BANK") or "default"
+    db_path = None
+    try:
+        db_path = BankManager(data_dir).get_bank_db_path(bank)
+        memory_id = Mnemosyne(db_path=str(db_path), bank=bank).remember(
+            text,
+            source=args.source,
+            importance=args.importance,
+            scope=args.scope,
+            metadata=metadata,
+        )
+    except Exception as e:  # noqa: BLE001 - report the engine failure with a fix line
+        verdict("retain: FAILED")
+        say(f"retain: {type(e).__name__}: {e}")
+        where = db_path if db_path is not None else data_dir
+        say(f"fix: check the bank db at {where} (bank '{bank}'); see mnemobrain doctor")
+        return 1
+    verdict(f"retain: ok {memory_id} ({len(text)} chars)")
+    return 0
+
+
+def cmd_doctor(args):
+    return doctor.run()
 
 
 def main(argv=None):
@@ -201,6 +401,16 @@ def main(argv=None):
     sub.add_parser("status", help="gbrain service + health status")
     sub.add_parser("doctor", help="read-only stack health check")
     sub.add_parser("env", help="print export lines for wiring up the stack")
+    p = sub.add_parser("rethink", help="queue request files for long-stale gbrain pages")
+    p.add_argument("--stale-days", type=int, default=RETHINK_STALE_DAYS)
+    p.add_argument("--limit", type=int, default=RETHINK_LIMIT)
+    p.add_argument("--json", action="store_true", help="print the queued requests as JSON")
+    p = sub.add_parser("retain", help="store one Mnemosyne memory (text arg or stdin)")
+    p.add_argument("--importance", type=float, default=0.5)
+    p.add_argument("--source", default="conversation")
+    p.add_argument("--scope", default="session")
+    p.add_argument("--metadata", default=None, help="JSON object stored with the memory")
+    p.add_argument("text", nargs="?", help="content to store; stdin when omitted")
     args = parser.parse_args(argv)
     return {
         "install": cmd_install,
@@ -210,6 +420,8 @@ def main(argv=None):
         "status": cmd_status,
         "doctor": cmd_doctor,
         "env": cmd_env,
+        "rethink": cmd_rethink,
+        "retain": cmd_retain,
     }[args.command](args)
 
 

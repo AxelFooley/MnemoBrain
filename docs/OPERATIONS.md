@@ -68,6 +68,24 @@ checkpoint flush). Example: `50 2 * * *`.
 `mnemosyne sleep --all-sessions --dry-run` to preview, then without
 `--dry-run` if the report looks right. Example: `0 4 * * 0`.
 
+## Job 4 — Standing-page rethink requests
+
+**What:** `mnemobrain rethink --stale-days 30 --limit 10` lists GBrain pages
+in updated_at ascending order, picks pages not touched for 30+ days (oldest
+first), and writes one request file per page into `<home>/rethink/` (filename
+is the slug with `/` → `__`). Each file says what to do: read the page, check
+it against recent Mnemosyne memories, rewrite if outdated.
+
+**Why:** standing pages go stale silently; this turns staleness into a
+reviewable queue instead of waiting for someone to notice.
+
+Run it daily and hand the printed request files to your agent (the command
+does bookkeeping only — the agent does the thinking). `--json` prints the
+queue as JSON for programmatic use. Request files self-clean once a page is
+refreshed. Example crontab: `0 5 * * *`. Single-writer applies: stop the
+gbrain service first (`mnemobrain stop gbrain`) — the command refuses to run
+while the service is up.
+
 ## After engine upgrades
 
 Run `mnemosyne doctor`; for GBrain, see docs/UPGRADING.md (reindex BEFORE

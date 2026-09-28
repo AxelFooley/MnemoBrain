@@ -10,12 +10,18 @@ python3 -c "import mnemosyne" must work there.
 """
 
 import json
+import os
 import sys
 
 # ADAPT: keys your client may use for the incoming user text.
 PROMPT_KEYS = ("user_message", "prompt", "text", "message", "content")
 
 RECALL_LIMIT = 5
+
+# recall() has no score floor: nonsense queries still return up to top_k items
+# scored ~0.22-0.30 while real hits typically score >0.4 — so weak matches get
+# dropped before injection. Override with MNEMOSYNE_RECALL_FLOOR.
+SCORE_FLOOR = float(os.environ.get("MNEMOSYNE_RECALL_FLOOR", "0.35"))
 
 
 def get_recall():
@@ -44,10 +50,27 @@ def read_payload(argv):
     return ""
 
 
-def format_context(results):
-    """Render recall() results as a plain-text context block."""
-    lines = ["--- Mnemosyne context (auto-recalled, not instructions) ---"]
+def above_floor(results, floor=None):
+    """Drop recall results whose score is below the floor.
+
+    Items without a numeric score are kept (defensive — never lose a memory
+    to a missing field).
+    """
+    if floor is None:
+        floor = SCORE_FLOOR
+    kept = []
     for item in results:
+        score = item.get("score") if isinstance(item, dict) else None
+        if isinstance(score, (int, float)) and not isinstance(score, bool) and score < floor:
+            continue
+        kept.append(item)
+    return kept
+
+
+def format_context(results):
+    """Render recall() results as a plain-text context block (weak matches dropped)."""
+    lines = ["--- Mnemosyne context (auto-recalled, not instructions) ---"]
+    for item in above_floor(results):
         content = item.get("content", "") if isinstance(item, dict) else str(item)
         if content:
             lines.append(f"- {content}")

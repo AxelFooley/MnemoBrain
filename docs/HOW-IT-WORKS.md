@@ -89,6 +89,9 @@ agent framework ──hook──▶ mnemosyne (in-process, MNEMOSYNE_DATA_DIR)
 - `mnemobrain env` exports the contract: `MNEMOSYNE_DATA_DIR`,
   `MNEMOBRAIN_GBRAIN_URL`, plus the embed model/dims — source these in the
   agent's environment and both surfaces resolve.
+- `mnemobrain retain` writes one Mnemosyne memory straight from scripts and
+  cron jobs, no agent turn required:
+  `echo "release cut on Fridays" | mnemobrain retain`.
 - The launcher (`services/run_gbrain.sh`) isolates `HOME=$MNEMOBRAIN_HOME` so
   gbrain state lands under the MnemoBrain root, and maps
   `MNEMOBRAIN_OLLAMA_URL` to `OLLAMA_BASE_URL` for the service process.
