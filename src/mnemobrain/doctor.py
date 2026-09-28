@@ -3,6 +3,7 @@
 import importlib.metadata
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.error
@@ -148,6 +149,28 @@ def check_gbrain_bin():
     )
 
 
+def check_gbrain_version():
+    installed = None
+    pkg_json = config.home() / "node_modules" / "gbrain" / "package.json"
+    try:
+        installed = json.loads(pkg_json.read_text()).get("version")
+    except (OSError, ValueError):
+        return None
+    if not installed:
+        return None
+    pinned = config.get_env("MNEMOBRAIN_GBRAIN_REF")
+    if not re.match(r"v?\d", pinned):
+        return _print("SKIP", "gbrain-version", "ref is not a version tag")
+    if installed == pinned.lstrip("v"):
+        return _print("PASS", "gbrain-version", f"installed {installed}, pinned {pinned}")
+    return _print(
+        "FAIL",
+        "gbrain-version",
+        f"installed {installed}, pinned {pinned}",
+        f"rm {config.home()}/bun.lock && bun install (or: mnemobrain install), then re-check",
+    )
+
+
 def check_gbrain_cfg():
     path = config.home() / ".gbrain" / "config.json"
     if not path.exists():
@@ -255,6 +278,7 @@ CHECKS = (
     check_bun,
     check_mnemosyne,
     check_gbrain_bin,
+    check_gbrain_version,
     check_gbrain_cfg,
     check_dirs,
     check_health,
