@@ -19,6 +19,8 @@ RETHINK_SCAN = 1000  # generous scan; gbrain list is sorted updated_asc (stalene
 
 ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?")
 LIST_HEADER_WORDS = {"slug", "title", "name", "updated", "updated_at", "age", "words"}
+# gbrain stderr banners that carry no failure information
+STDERR_BANNER = re.compile(r"^(UPGRADE_AVAILABLE\b|gbrain \d+\.\d+\.\d+ -> )")
 
 
 def say(msg):
@@ -206,8 +208,13 @@ def _parse_iso(text):
 def _parse_gbrain_list(text):
     """`gbrain list` output -> [(slug, updated_at ISO), ...] in output order.
 
-    Tolerates both JSON lines and the plain table: the ISO timestamp in a row
-    is updated_at, the first non-header token outside it is the slug.
+    Primary path is the REAL renderer shape (cli.ts case 'list_pages'):
+    TAB-separated rows with a date-only third column:
+        slug\ttype\tYYYY-MM-DD\ttitle
+    A date-only updated_at parses as midnight UTC, which is fine for
+    staleness granularity (whole-day). Also tolerates JSON lines and legacy
+    full-timestamp tables: there the ISO timestamp in a row is updated_at and
+    the first non-header token outside it is the slug (ISO_TS fallback).
     """
     pages = []
     for raw in text.splitlines():
@@ -224,6 +231,10 @@ def _parse_gbrain_list(text):
             except ValueError:
                 pass
             continue
+        fields = line.split("\t")
+        if len(fields) >= 3 and fields[0].strip() and _parse_iso(fields[2]):
+            pages.append((fields[0].strip(), fields[2].strip()))
+            continue
         match = ISO_TS.search(line)
         if not match:
             continue
@@ -233,6 +244,34 @@ def _parse_gbrain_list(text):
         if slug:
             pages.append((slug, match.group(0).replace(" ", "T")))
     return pages
+
+
+def _first_stderr_line(stderr):
+    """First stderr line that is not an upgrade/banner line; None if none left."""
+    for line in (stderr or "").splitlines():
+        stripped = line.strip()
+        if stripped and not STDERR_BANNER.match(stripped):
+            return stripped
+    return None
+
+
+def gbrain_read_failed(label, r):
+    """True when a read-only gbrain subprocess failed; reports verdict + fix.
+
+    `gbrain list` exits non-zero with empty stdout on real failures (e.g. the
+    single-writer db lock held by `gbrain serve`), so callers must check this
+    before treating an empty parse as "zero pages".
+    """
+    if r.returncode == 0:
+        return False
+    verdict(f"{label}: FAILED")
+    detail = _first_stderr_line(r.stderr) or "(no stderr output)"
+    say(f"{label}: gbrain exited {r.returncode}: {detail}")
+    say(
+        "fix: stop the other gbrain process holding the db (mnemobrain stop gbrain),"
+        " then retry; see mnemobrain doctor"
+    )
+    return True
 
 
 def render_rethink_request(slug, updated_at, stale_days, requested_at):
@@ -294,6 +333,8 @@ def cmd_rethink(args):
         check=False,
         env=_gbrain_env(),
     )
+    if gbrain_read_failed("rethink", r):
+        return 1
     pages = _parse_gbrain_list(r.stdout)
     cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=args.stale_days)
     stale = [(slug, updated) for slug, updated in pages if (_parse_iso(updated) or cutoff) < cutoff]

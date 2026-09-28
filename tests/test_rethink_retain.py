@@ -33,6 +33,15 @@ old-guide 2099-01-01T00:00:00Z
 fresh-guide 2099-01-01T00:00:00Z
 """
 
+# Real renderer shape (cli.ts case 'list_pages'): TAB-separated, date-only
+# third column, title with spaces; slash slugs are real.
+TSV_REAL = (
+    "slug\ttype\tupdated_at\ttitle\n"
+    "old-guide\tresearch\t2020-03-01\tOld Guide Title With Spaces\n"
+    "deep/nested/page\tguide\t2020-06-01\tNested Title Also With Spaces\n"
+    "fresh-guide\tguide\t2099-01-01\tFresh Enough Title\n"
+)
+
 
 class EnvCase(unittest.TestCase):
     def setUp(self):
@@ -139,6 +148,44 @@ class TestRethink(EnvCase):
         self.assertIn("single-writer", out)
         self.assertIn("stop gbrain", err)
         self.assertFalse(self.rethink_dir().exists())
+
+    def test_parse_real_renderer_tsv_row(self):
+        row = "deep/nested/page\tresearch\t2020-06-01\tTitle With Spaces"
+        self.assertEqual(cli._parse_gbrain_list(row), [("deep/nested/page", "2020-06-01")])
+
+    def test_request_files_for_real_renderer_tsv(self):
+        self.write_fake_gbrain(TSV_REAL)
+        code, out, _err = self.run_cmd(["rethink", "--stale-days", "30", "--limit", "10"])
+        self.assertEqual(code, 0)
+        self.assertIn("rethink: 2 stale pages (queued 2 request files in", out)
+        old = self.rethink_dir() / "old-guide.md"
+        self.assertTrue(old.exists())
+        self.assertIn("# rethink: old-guide", old.read_text())
+        nested = self.rethink_dir() / "deep__nested__page.md"
+        self.assertTrue(nested.exists())
+        text = nested.read_text()
+        self.assertIn("# rethink: deep/nested/page", text)
+        self.assertIn("stale_since: 2020-06-01", text)
+        self.assertFalse((self.rethink_dir() / "fresh-guide.md").exists())
+
+    def test_gbrain_list_failure_is_reported_not_zero_pages(self):
+        bin_dir = self.home / "node_modules" / ".bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        fake = bin_dir / "gbrain"
+        fake.write_text(
+            "#!/bin/sh\n"
+            "echo 'UPGRADE_AVAILABLE' >&2\n"
+            "echo 'gbrain 0.54.1 -> https://example.invalid/upgrade' >&2\n"
+            'echo "GBrain\'s local database is already open through gbrain serve" >&2\n'
+            "exit 1\n"
+        )
+        fake.chmod(0o755)
+        code, out, err = self.run_cmd(["rethink"])
+        self.assertEqual(code, 1)
+        self.assertIn("rethink: FAILED", out)
+        self.assertIn("already open through gbrain serve", err)
+        self.assertNotIn("0 stale pages", out)
+        self.assertIn("fix:", err)
 
 
 class TestRetain(EnvCase):
