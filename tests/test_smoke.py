@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import sys
 import tempfile
 import threading
@@ -51,6 +52,26 @@ class TestConfig(EnvCase):
         os.environ["MNEMOBRAIN_GBRAIN_PORT"] = "4000"
         self.assertEqual(config.get_env("MNEMOBRAIN_GBRAIN_URL"), "http://127.0.0.1:4000/health")
 
+    def test_file_key_strips_only_full_mnemosyne_prefix(self):
+        self.assertEqual(config.file_key("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "temporal_halflife_hours")
+        self.assertNotEqual(
+            config.file_key("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "emporal_halflife_hours"
+        )
+        self.assertEqual(config.file_key("MNEMOBRAIN_GBRAIN_REF"), "gbrain_ref")
+        self.assertEqual(config.file_key("MNEMOBRAIN_MNEMOSYNE_VERSION"), "mnemosyne_version")
+
+    def test_config_file_roundtrip_mnemosyne_key(self):
+        os.environ.pop("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS", None)
+        config.write_config()
+        path = self.home / "config" / "mnemobrain.yaml"
+        path.write_text(path.read_text() + "temporal_halflife_hours: 24\n")
+        self.assertEqual(config.get_env("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "24")
+
+    def test_render_config_has_unmangled_mnemosyne_key(self):
+        text = config.render_config()
+        self.assertTrue(any(line.startswith("temporal_halflife_hours:") for line in text.splitlines()))
+        self.assertFalse([line for line in text.splitlines() if line.startswith("emporal_")])
+
     def test_precedence_env_over_file_over_default(self):
         config.write_config()
         self.assertEqual(config.get_env("MNEMOBRAIN_GBRAIN_PORT"), "3131")
@@ -74,9 +95,9 @@ class TestConfigWriter(EnvCase):
     def test_parse_roundtrip(self):
         config.write_config()
         parsed = config.parse_config(self.path().read_text())
-        self.assertEqual(parsed["mnemosyne_version"], "4.0.0b3")
-        self.assertEqual(parsed["gbrain_ref"], "v0.54.1.1")
-        self.assertEqual(parsed["gbrain_url"], "http://127.0.0.1:3131/health")
+        self.assertEqual(parsed["mnemosyne_version"], config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"])
+        self.assertEqual(parsed["gbrain_ref"], config.DEFAULTS["MNEMOBRAIN_GBRAIN_REF"])
+        self.assertEqual(parsed["gbrain_url"], config.default_value("MNEMOBRAIN_GBRAIN_URL"))
 
 
 class TestLauncher(EnvCase):
@@ -253,6 +274,19 @@ class TestMcpAuthCheck(McpServerCase):
     def test_server_down_is_none(self):
         os.environ["MNEMOBRAIN_GBRAIN_URL"] = f"http://127.0.0.1:{self.port + 1}/mcp"
         self.assertIsNone(doctor.mcp_auth_check())
+
+
+class TestPortOpen(unittest.TestCase):
+    def test_open_and_closed_socket(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            port = listener.getsockname()[1]
+            self.assertTrue(cli._port_open(port))
+        finally:
+            listener.close()
+        self.assertFalse(cli._port_open(port))
 
 
 class TestRunningHealthy(EnvCase):

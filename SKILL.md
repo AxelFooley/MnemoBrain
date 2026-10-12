@@ -48,12 +48,15 @@ Verification: `./.venv/bin/mnemobrain -h` prints usage and exits 0.
 ./.venv/bin/mnemobrain install
 ```
 
-What it does: verifies bun >= 1.3.11; pip-installs `mnemosyne-memory==4.0.0b3`
-into the venv; `bun add github:garrytan/gbrain#v0.54.1.1 --ignore-scripts`
-into `$MNEMOBRAIN_HOME`; creates the data layout; writes the defaults config
-and gbrain's `.gbrain/config.json` (create-if-absent).
-Pins are env-overridable (`MNEMOBRAIN_MNEMOSYNE_VERSION`,
-`MNEMOBRAIN_GBRAIN_REF`) — never hardcode a different ref anywhere else.
+What it does: verifies bun >= 1.3.11; pip-installs the configured
+`MNEMOBRAIN_MNEMOSYNE_VERSION` pin of `mnemosyne-memory` into the venv;
+`bun add`s the configured `MNEMOBRAIN_GBRAIN_REF` of
+`github:garrytan/gbrain --ignore-scripts` into `$MNEMOBRAIN_HOME`; creates
+the data layout; writes the defaults config and gbrain's
+`.gbrain/config.json` (create-if-absent). The pins in effect are the
+resolved `MNEMOBRAIN_MNEMOSYNE_VERSION` / `MNEMOBRAIN_GBRAIN_REF` values
+(run `mnemobrain env` to print them); they are env-overridable — never
+hardcode a different ref anywhere else.
 
 Expected output shape: `install:` progress lines on stderr, one final
 `install: ok (...)` line on stdout, exit code 0.
@@ -119,7 +122,10 @@ HOME="$MNEMOBRAIN_HOME" "$MNEMOBRAIN_HOME/node_modules/.bin/gbrain" delete mnemo
 Run the smoke test while the service is stopped — gbrain is a single-writer
 store and its CLI refuses writes while `gbrain serve` holds the database.
 
-Verification: `get` prints the body and `delete` exits 0.
+Verification: `get` prints the body and `delete` exits 0. Note: on some
+gbrain versions `delete` can lose a revision race after `put` and leave the
+page in place despite exiting 0; confirm with a final `get`. A lingering
+smoke page is harmless, and the conflict can be reported upstream.
 
 ## 7. Start GBrain and verify the stack
 
@@ -149,6 +155,15 @@ Then point the two memory surfaces at the engines:
 - **deliberate knowledge**: GBrain HTTP + MCP at
   `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT` (health URL:
   `$MNEMOBRAIN_GBRAIN_URL`).
+
+GBrain requires a bearer credential on its HTTP MCP surface. Provision one
+per agent (works with the service stopped) and hand it over — see the README
+section "Connect an agent over MCP (credentials)":
+`gbrain mcp grant <name> --harness <adapter> --url <mcp-url> --credentials-out <file>`,
+then `gbrain connect <mcp-url> --harness <adapter> --credentials-file <file>`.
+`gbrain mcp adapters` lists harness ids; use `generic` for clients without
+an adapter and add the MCP URL plus bearer header to the client's own MCP
+configuration.
 
 For the full wiring explanation (hooks, SDK, MCP, env contract), see
 [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
