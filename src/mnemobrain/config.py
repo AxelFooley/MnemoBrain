@@ -31,7 +31,11 @@ def default_value(name):
 
 
 def file_key(name):
-    return name[len("MNEMOBRAIN_") :].lower()
+    # Config keys drop whichever MNEMOBRAIN_/MNEMOSYNE_ prefix is present.
+    for prefix in ("MNEMOBRAIN_", "MNEMOSYNE_"):
+        if name.startswith(prefix):
+            return name[len(prefix) :].lower()
+    return name.lower()
 
 
 def parse_config(text):

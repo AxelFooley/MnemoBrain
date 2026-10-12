@@ -3,6 +3,7 @@
 import argparse
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -47,6 +48,15 @@ def read_pid(path):
         return int(path.read_text().strip())
     except (FileNotFoundError, ValueError):
         return None
+
+
+def _port_open(port):
+    """True when something accepts TCP connections on 127.0.0.1:port."""
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)), timeout=1):
+            return True
+    except OSError:
+        return False
 
 
 def cmd_install(args):
@@ -141,15 +151,17 @@ def cmd_start(args):
             start_new_session=True,
         )
     pidfile.write_text(f"{proc.pid}\n")
+    port = config.get_env("MNEMOBRAIN_GBRAIN_PORT")
     for _ in range(120):
         ok, detail = doctor.health_check()
-        if ok:
+        if ok and _port_open(port):
             verdict(f"gbrain: healthy (pid {proc.pid}, {detail})")
             return 0
         time.sleep(0.5)
     verdict(
         f"gbrain: started (pid {proc.pid}) but health unhealthy after 60s — "
         f"check {d['logs'] / 'gbrain.log'}"
+        + (f" (port {port} not accepting connections)" if ok else "")
     )
     return 1
 

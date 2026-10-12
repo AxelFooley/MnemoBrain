@@ -49,7 +49,7 @@ never overwritten (it may be hand-customized; `doctor` reports if its
 ## config file format
 
 Plain `key: value` lines, parsed by a 15-line stdlib parser (no yaml
-dependency). Keys are the variable names minus the `MNEMOBRAIN_` prefix, lowercased:
+dependency). Keys are the variable names minus their `MNEMOBRAIN_`/`MNEMOSYNE_` prefix, lowercased:
 
 ```yaml
 # mnemobrain stack defaults. Process env overrides these values.
@@ -60,6 +60,7 @@ gbrain_url: http://127.0.0.1:3131/health
 ollama_url: http://localhost:11434/v1
 embed_model: ollama:bge-m3
 embed_dims: 1024
+temporal_halflife_hours: 168
 ```
 
 Notes:
@@ -72,6 +73,9 @@ Notes:
   different path.
 - Re-run `mnemobrain init` after changing pins/ports so the file and the
   running stack agree.
+- `MNEMOBRAIN_GBRAIN_URL` is derived from `MNEMOBRAIN_GBRAIN_PORT`; health
+  checks read the exported URL. If you change the port in a shell that
+  already sourced `mnemobrain env`, re-run `eval "$(mnemobrain env)"`.
 
 ## Temporal decay
 
