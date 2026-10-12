@@ -3,8 +3,10 @@
 import importlib.metadata
 import json
 import os
+import pathlib
 import re
 import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -12,6 +14,30 @@ import urllib.request
 from mnemobrain import __version__, config, deps
 
 TIMEOUT = 2
+HERMES_ROOT_ENV = "MNEMOBRAIN_HERMES_ROOT"
+HERMES_ROOT_SEARCH = 5
+
+
+def hermes_root():
+    """Best-effort root of Hermes' install (a dir holding hermes_constants.py).
+
+    MNEMOBRAIN_HERMES_ROOT (process env only — deliberate live override) wins;
+    otherwise walk up from the `hermes` launcher a bounded number of levels.
+    """
+    env_root = os.environ.get(HERMES_ROOT_ENV)
+    if env_root:
+        return pathlib.Path(env_root).resolve()
+    found = shutil.which("hermes")
+    if not found:
+        return None
+    probe = pathlib.Path(found).resolve()
+    for _ in range(HERMES_ROOT_SEARCH + 1):
+        if (probe / "hermes_constants.py").is_file():
+            return probe
+        if probe.parent == probe:
+            return None
+        probe = probe.parent
+    return None
 
 
 def _print(status, name, detail, fix=""):
@@ -134,6 +160,74 @@ def check_mnemosyne():
         )
     return _print(
         "FAIL", "mnemosyne", f"found {found}, pinned {pin}", f"pip install mnemosyne-memory=={pin}"
+    )
+
+
+def check_mnemosyne_hermes():
+    try:
+        found = importlib.metadata.version("mnemosyne-hermes")
+    except importlib.metadata.PackageNotFoundError:
+        return _print(
+            "SKIP",
+            "mnemosyne-hermes",
+            "not installed in this interpreter (not a Hermes deployment?)",
+        )
+    if found in deps.MNEMOSYNE_HERMES_KNOWN_BAD:
+        return _print(
+            "FAIL",
+            "mnemosyne-hermes",
+            f"{found} is known-unconstructible (P1b binding guard raises in __init__)",
+            f"mnemosyne-hermes {found} cannot build its provider; install a fixed release",
+        )
+    code = (
+        "import hermes_constants\n"
+        "from mnemosyne_hermes import MnemosyneMemoryProvider as P\n"
+        "P(); print('OK')\n"
+    )
+    root = hermes_root()
+    if root is None:
+        return _print(
+            "SKIP",
+            "mnemosyne-hermes",
+            f"{found} installed, but Hermes' runtime was not locatable — construction probe"
+            " not conclusive",
+            "set MNEMOBRAIN_HERMES_ROOT to Hermes' install directory to enable this check",
+        )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
+    try:
+        r = subprocess.run(
+            [sys.executable, "-c", code],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return _print("WARN", "mnemosyne-hermes", "provider construction timed out after 60s")
+    if r.returncode == 0 and "OK" in r.stdout:
+        return _print("PASS", "mnemosyne-hermes", f"{found} provider constructs")
+    out = (r.stderr or "") + (r.stdout or "")
+    if "ModuleNotFoundError" in out:
+        if "hermes_constants" in out:
+            return _print(
+                "SKIP",
+                "mnemosyne-hermes",
+                "could not establish Hermes' import environment — probe not conclusive",
+            )
+        return _print(
+            "SKIP",
+            "mnemosyne-hermes",
+            "glue not importable in this interpreter (not a Hermes deployment?)",
+        )
+    lines = [line for line in out.splitlines() if line.strip()]
+    detail = lines[-1][:160] if lines else "provider construction failed with no output"
+    return _print(
+        "FAIL",
+        "mnemosyne-hermes",
+        f"{found}: {detail}",
+        f"mnemosyne-hermes {found} cannot build its provider; install a fixed release",
     )
 
 
@@ -277,6 +371,7 @@ CHECKS = (
     check_python,
     check_bun,
     check_mnemosyne,
+    check_mnemosyne_hermes,
     check_gbrain_bin,
     check_gbrain_version,
     check_gbrain_cfg,
@@ -294,6 +389,6 @@ def run():
     for check in CHECKS:
         status = check()
         if status:
-            counts[status] += 1
+            counts[status] = counts.get(status, 0) + 1
     print(f"doctor: {counts['PASS']} pass, {counts['WARN']} warn, {counts['FAIL']} fail")
     return 1 if counts["FAIL"] else 0

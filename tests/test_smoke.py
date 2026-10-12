@@ -1,4 +1,5 @@
 import contextlib
+import importlib.metadata
 import io
 import json
 import os
@@ -53,7 +54,9 @@ class TestConfig(EnvCase):
         self.assertEqual(config.get_env("MNEMOBRAIN_GBRAIN_URL"), "http://127.0.0.1:4000/health")
 
     def test_file_key_strips_only_full_mnemosyne_prefix(self):
-        self.assertEqual(config.file_key("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "temporal_halflife_hours")
+        self.assertEqual(
+            config.file_key("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "temporal_halflife_hours"
+        )
         self.assertNotEqual(
             config.file_key("MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS"), "emporal_halflife_hours"
         )
@@ -69,7 +72,9 @@ class TestConfig(EnvCase):
 
     def test_render_config_has_unmangled_mnemosyne_key(self):
         text = config.render_config()
-        self.assertTrue(any(line.startswith("temporal_halflife_hours:") for line in text.splitlines()))
+        self.assertTrue(
+            any(line.startswith("temporal_halflife_hours:") for line in text.splitlines())
+        )
         self.assertFalse([line for line in text.splitlines() if line.startswith("emporal_")])
 
     def test_precedence_env_over_file_over_default(self):
@@ -95,7 +100,9 @@ class TestConfigWriter(EnvCase):
     def test_parse_roundtrip(self):
         config.write_config()
         parsed = config.parse_config(self.path().read_text())
-        self.assertEqual(parsed["mnemosyne_version"], config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"])
+        self.assertEqual(
+            parsed["mnemosyne_version"], config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"]
+        )
         self.assertEqual(parsed["gbrain_ref"], config.DEFAULTS["MNEMOBRAIN_GBRAIN_REF"])
         self.assertEqual(parsed["gbrain_url"], config.default_value("MNEMOBRAIN_GBRAIN_URL"))
 
@@ -462,6 +469,119 @@ class TestBunLookup(unittest.TestCase):
             _ok, _detail, fix = deps.check_bun()
         self.assertIn("~/.bun/bin", fix)
         self.assertIn("install bun:", fix)
+
+
+class TestMnemosyneHermesCheck(unittest.TestCase):
+    def test_known_bad_version_listed(self):
+        self.assertIn("0.7.4", deps.MNEMOSYNE_HERMES_KNOWN_BAD)
+
+    def test_known_bad_version_fails_without_probe(self):
+        result = io.StringIO()
+        probe = unittest.mock.patch.object(doctor.subprocess, "run")
+        with (
+            unittest.mock.patch.object(doctor.importlib.metadata, "version", return_value="0.7.4"),
+            probe as probe_run,
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "FAIL")
+        self.assertIn("known-unconstructible", result.getvalue())
+        self.assertIn("0.7.4", result.getvalue())
+        probe_run.assert_not_called()
+
+    def test_package_missing_is_skip(self):
+        result = io.StringIO()
+        with (
+            unittest.mock.patch.object(
+                doctor.importlib.metadata,
+                "version",
+                side_effect=importlib.metadata.PackageNotFoundError("mnemosyne-hermes"),
+            ),
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "SKIP")
+        self.assertIn("not installed", result.getvalue())
+
+    def test_probe_nonzero_non_module_error_is_fail(self):
+        stub = unittest.mock.Mock(
+            returncode=1,
+            stdout="",
+            stderr="RuntimeError:\nMnemosyne: no binding for the current home '/opt/data'",
+        )
+        result = io.StringIO()
+        with (
+            unittest.mock.patch.object(doctor.importlib.metadata, "version", return_value="0.8.0"),
+            unittest.mock.patch.object(
+                doctor.shutil, "which", return_value="/opt/hermes/bin/hermes"
+            ),
+            unittest.mock.patch.object(doctor.subprocess, "run", return_value=stub),
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "FAIL")
+        self.assertIn("no binding for the current home '/opt/data'", result.getvalue())
+
+    def test_probe_zero_is_pass_only_with_hermes_environment(self):
+        stub = unittest.mock.Mock(returncode=0, stdout="OK\n", stderr="")
+        result = io.StringIO()
+        with (
+            unittest.mock.patch.object(doctor.importlib.metadata, "version", return_value="0.8.0"),
+            unittest.mock.patch.object(
+                doctor.shutil, "which", return_value="/opt/hermes/bin/hermes"
+            ),
+            unittest.mock.patch.object(doctor.subprocess, "run", return_value=stub) as probe,
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "PASS")
+        self.assertIn("provider constructs", result.getvalue())
+        kwargs = probe.call_args.kwargs
+        self.assertIn("env", kwargs)
+        self.assertIn("PYTHONPATH", kwargs["env"])
+        self.assertTrue(kwargs["env"]["PYTHONPATH"].startswith("/opt/hermes" + os.pathsep))
+        self.assertIn("import hermes_constants", " ".join(probe.call_args.args[0]))
+
+    def test_probe_hermes_constants_module_error_is_skip(self):
+        stub = unittest.mock.Mock(
+            returncode=1,
+            stdout="",
+            stderr="ModuleNotFoundError: No module named 'hermes_constants'",
+        )
+        result = io.StringIO()
+        with (
+            unittest.mock.patch.object(doctor.importlib.metadata, "version", return_value="0.8.0"),
+            unittest.mock.patch.object(
+                doctor.shutil, "which", return_value="/opt/hermes/bin/hermes"
+            ),
+            unittest.mock.patch.object(doctor.subprocess, "run", return_value=stub),
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "SKIP")
+        self.assertIn("not conclusive", result.getvalue())
+
+    def test_no_root_is_skip_and_probe_never_runs(self):
+        probe = unittest.mock.Mock()
+        result = io.StringIO()
+        with (
+            unittest.mock.patch.object(doctor.importlib.metadata, "version", return_value="0.8.0"),
+            unittest.mock.patch.object(doctor, "hermes_root", return_value=None),
+            unittest.mock.patch.object(doctor.subprocess, "run", probe),
+            contextlib.redirect_stderr(result),
+        ):
+            status = doctor.check_mnemosyne_hermes()
+        self.assertEqual(status, "SKIP")
+        self.assertIn("not conclusive", result.getvalue())
+        self.assertIn("MNEMOBRAIN_HERMES_ROOT", result.getvalue())
+        probe.assert_not_called()
+
+    def test_check_is_registered(self):
+        self.assertIn(doctor.check_mnemosyne_hermes, doctor.CHECKS)
+        self.assertGreater(
+            doctor.CHECKS.index(doctor.check_mnemosyne_hermes),
+            doctor.CHECKS.index(doctor.check_mnemosyne),
+        )
 
 
 if __name__ == "__main__":
