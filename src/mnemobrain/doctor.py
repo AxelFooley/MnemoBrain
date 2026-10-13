@@ -163,6 +163,44 @@ def check_mnemosyne():
     )
 
 
+HERMES_PROBE_CODE = (
+    "import hermes_constants\n"
+    "from mnemosyne_hermes import MnemosyneMemoryProvider as P\n"
+    "P(); print('OK')\n"
+    "from mnemosyne.core import beam, embeddings\n"
+    "print('CAP', embeddings.available(), beam._SQLITE_VEC_AVAILABLE)\n"
+)
+
+
+def _probe_runtime(root):
+    """Run HERMES_PROBE_CODE inside Hermes' runtime, with <root> first on sys.path.
+
+    ponytail: the probe subprocess runs once per hermes check (2x per doctor) —
+    fine for a manual tool; memoize only if it measurably grows.
+    """
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.run(
+        [sys.executable, "-c", HERMES_PROBE_CODE],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+    )
+
+
+def _probe_outcome(r):
+    """Parse a probe result: (constructed, embeddings_available|None, sqlite_vec|None)."""
+    lines = r.stdout.splitlines()
+    constructed = (r.returncode == 0 and "OK" in r.stdout) or any(line == "OK" for line in lines)
+    capline = next((line for line in reversed(lines) if line.startswith("CAP ")), "")
+    marks = capline.split()[1:]
+    embeddings_ok = marks[0] == "True" if marks else None
+    vec = marks[1] == "True" if len(marks) > 1 else None
+    return constructed, embeddings_ok, vec
+
+
 def check_mnemosyne_hermes():
     try:
         found = importlib.metadata.version("mnemosyne-hermes")
@@ -179,11 +217,6 @@ def check_mnemosyne_hermes():
             f"{found} is known-unconstructible (P1b binding guard raises in __init__)",
             f"mnemosyne-hermes {found} cannot build its provider; install a fixed release",
         )
-    code = (
-        "import hermes_constants\n"
-        "from mnemosyne_hermes import MnemosyneMemoryProvider as P\n"
-        "P(); print('OK')\n"
-    )
     root = hermes_root()
     if root is None:
         return _print(
@@ -193,20 +226,12 @@ def check_mnemosyne_hermes():
             " not conclusive",
             "set MNEMOBRAIN_HERMES_ROOT to Hermes' install directory to enable this check",
         )
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        r = subprocess.run(
-            [sys.executable, "-c", code],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env,
-        )
+        r = _probe_runtime(root)
     except subprocess.TimeoutExpired:
         return _print("WARN", "mnemosyne-hermes", "provider construction timed out after 60s")
-    if r.returncode == 0 and "OK" in r.stdout:
+    constructed, _embeddings_ok, _vec = _probe_outcome(r)
+    if constructed:
         return _print("PASS", "mnemosyne-hermes", f"{found} provider constructs")
     out = (r.stderr or "") + (r.stdout or "")
     if "ModuleNotFoundError" in out:
@@ -228,6 +253,56 @@ def check_mnemosyne_hermes():
         "mnemosyne-hermes",
         f"{found}: {detail}",
         f"mnemosyne-hermes {found} cannot build its provider; install a fixed release",
+    )
+
+
+def check_mnemosyne_hermes_embeddings():
+    name = "hermes-embed"
+    try:
+        found = importlib.metadata.version("mnemosyne-hermes")
+    except importlib.metadata.PackageNotFoundError:
+        return _print("SKIP", name, "not installed in this interpreter (not a Hermes deployment?)")
+    if found in deps.MNEMOSYNE_HERMES_KNOWN_BAD:
+        return _print(
+            "SKIP",
+            name,
+            f"{found} is known-unconstructible — embedding capability not verifiable",
+            f"mnemosyne-hermes {found} cannot build its provider; install a fixed release",
+        )
+    root = hermes_root()
+    if root is None:
+        return _print(
+            "SKIP",
+            name,
+            f"{found} installed, but Hermes' runtime was not locatable — capability probe"
+            " not conclusive",
+            "set MNEMOBRAIN_HERMES_ROOT to Hermes' install directory to enable this check",
+        )
+    try:
+        r = _probe_runtime(root)
+    except subprocess.TimeoutExpired:
+        return _print("SKIP", name, "runtime probe timed out after 60s — capability not conclusive")
+    constructed, embeddings_ok, vec = _probe_outcome(r)
+    if not constructed:
+        return _print(
+            "SKIP",
+            name,
+            "provider construction failed — capability not conclusive (see the"
+            " mnemosyne-hermes line)",
+        )
+    if embeddings_ok:
+        detail = f"{found} provider constructs and can embed"
+        if vec is False or vec is None:
+            detail += " (sqlite-vec off — vector search degraded)"
+        return _print("PASS", name, detail)
+    tail = [line for line in (r.stderr or "").splitlines() if line.strip()]
+    cause = f" ({tail[-1][:160]})" if tail else ""
+    return _print(
+        "WARN",
+        name,
+        f"{found}: embedding engine unavailable — dense recall disabled; recall is keyword-only"
+        f"{cause}",
+        f"in Hermes' runtime at {root}: pip install 'mnemosyne-memory[embeddings]=={found}'",
     )
 
 
@@ -372,6 +447,7 @@ CHECKS = (
     check_bun,
     check_mnemosyne,
     check_mnemosyne_hermes,
+    check_mnemosyne_hermes_embeddings,
     check_gbrain_bin,
     check_gbrain_version,
     check_gbrain_cfg,
