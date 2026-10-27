@@ -123,6 +123,40 @@ class TestLauncher(EnvCase):
         os.environ["MNEMOBRAIN_GBRAIN_PORT"] = "4711"
         self.assertIn('--port "4711"', cli.render_launcher("/bin/gbrain-fake"))
 
+    def test_launcher_passthrough_env_exports_listed_names(self):
+        os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "GBRAIN_ADMIN_BOOTSTRAP_TOKEN,PATH"
+        os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = "tok"
+        text = cli.render_launcher("/bin/gbrain-fake")
+        self.assertIn('GBRAIN_ADMIN_BOOTSTRAP_TOKEN="tok"', text)
+        self.assertIn('PATH="', text)
+
+    def test_launcher_passthrough_skips_empty_values(self):
+        os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "GBRAIN_ADMIN_BOOTSTRAP_TOKEN"
+        os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = ""
+        self.assertNotIn(
+            "GBRAIN_ADMIN_BOOTSTRAP_TOKEN", cli.render_launcher("/bin/gbrain-fake")
+        )
+
+    def test_launcher_passthrough_cannot_override_home(self):
+        os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "HOME"
+        fake_home = str(self.home / "elsewhere")
+        saved = os.environ["HOME"]
+        os.environ["HOME"] = fake_home
+        try:
+            text = cli.render_launcher("/bin/gbrain-fake")
+        finally:
+            os.environ["HOME"] = saved
+        self.assertIn(f'HOME="{self.home}"', text)
+        self.assertNotIn(fake_home, text)
+
+    def test_launcher_passthrough_escapes_shell_metacharacters(self):
+        os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "GBRAIN_ADMIN_BOOTSTRAP_TOKEN"
+        os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = 'a"b$c`d'
+        self.assertIn(
+            'GBRAIN_ADMIN_BOOTSTRAP_TOKEN="a\\"b\\$c\\`d"',
+            cli.render_launcher("/bin/gbrain-fake"),
+        )
+
 
 class TestEnvLines(EnvCase):
     def test_env_lines_export_real_names(self):
