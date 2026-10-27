@@ -15,6 +15,13 @@ BUN_INSTALL = (
     "exported in ~/.profile for login shells)"
 )
 
+# mnemosyne-hermes releases whose provider cannot be constructed inside Hermes.
+# 0.7.4: __init__ writes the _beam property before _bindings exists, and the P1b
+# fail-closed binding guard raises whenever a live HERMES_HOME resolves. Fixed
+# upstream in 0.7.5 (mnemosyne-oss/mnemosyne PR #1155, commit 97a9ae7e9) which is
+# not yet on PyPI at time of writing.
+MNEMOSYNE_HERMES_KNOWN_BAD = ("0.7.4",)
+
 
 def bun_bin():
     """Locate bun: PATH first, then the default install dir (WSL login shells
