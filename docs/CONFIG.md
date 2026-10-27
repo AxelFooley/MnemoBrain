@@ -23,6 +23,7 @@ the pin/port/model and re-run `mnemobrain init` to persist new values.
 | `MNEMOBRAIN_EMBED_MODEL` | `ollama:bge-m3` | embedding model id |
 | `MNEMOBRAIN_EMBED_DIMS` | `1024` | embedding dimensionality |
 | `MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` | `168` | Hours until a memory's recency boost halves in SDK/CLI recall (temporal decay) |
+| `MNEMOBRAIN_PASSTHROUGH_ENV` | (empty) | comma-separated list of environment variable names copied from the mnemobrain process into the generated `services/run_gbrain.sh` (e.g. `GBRAIN_ADMIN_BOOTSTRAP_TOKEN`); values are read at render time; empty/unset names are skipped; `HOME` cannot be overridden |
 
 Derived exports from `mnemobrain env` (not separately configurable):
 
