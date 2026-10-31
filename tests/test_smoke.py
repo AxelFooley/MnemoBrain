@@ -6,9 +6,11 @@ import os
 import pathlib
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
+import types
 import unittest
 import unittest.mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -106,6 +108,47 @@ class TestConfigWriter(EnvCase):
         self.assertEqual(parsed["gbrain_ref"], config.DEFAULTS["MNEMOBRAIN_GBRAIN_REF"])
         self.assertEqual(parsed["gbrain_url"], config.default_value("MNEMOBRAIN_GBRAIN_URL"))
 
+    def _fresh_config(self):
+        self.assertTrue(config.write_config())
+
+    def test_file_only_customization_survives_version_bump(self):
+        # issue #19 repro: freshly installed defaults, hand-edited ollama_url,
+        # then a `mnemobrain install` run that only bumps the version pin via env.
+        self._fresh_config()
+        custom_url = "http://172.17.128.1:11434/v1"
+        text = (
+            self.path()
+            .read_text()
+            .replace(
+                f"ollama_url: {config.DEFAULTS['MNEMOBRAIN_OLLAMA_URL']}",
+                f"ollama_url: {custom_url}",
+            )
+        )
+        self.assertIn(f"ollama_url: {custom_url}", text)
+        self.path().write_text(text)
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "4.1.0"
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        self.assertEqual(parsed["ollama_url"], custom_url)
+        self.assertEqual(parsed["mnemosyne_version"], "4.1.0")
+
+    def test_env_override_wins_and_is_persisted(self):
+        self._fresh_config()
+        os.environ["MNEMOBRAIN_OLLAMA_URL"] = "http://10.0.0.5:11434/v1"
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        self.assertEqual(parsed["ollama_url"], "http://10.0.0.5:11434/v1")
+        # once persisted, it keeps winning without the env var
+        del os.environ["MNEMOBRAIN_OLLAMA_URL"]
+        self.assertEqual(config.get_env("MNEMOBRAIN_OLLAMA_URL"), "http://10.0.0.5:11434/v1")
+
+    def test_fresh_install_renders_pure_defaults(self):
+        self.assertFalse(self.path().exists())
+        self.assertTrue(config.write_config())
+        parsed = config.parse_config(self.path().read_text())
+        for name in config.FILE_KEYS:
+            self.assertEqual(parsed[config.file_key(name)], config.default_value(name))
+
 
 class TestLauncher(EnvCase):
     def test_launcher_serve_http_no_home_flag(self):
@@ -140,9 +183,7 @@ class TestLauncher(EnvCase):
     def test_launcher_passthrough_skips_empty_values(self):
         os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "GBRAIN_ADMIN_BOOTSTRAP_TOKEN"
         os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = ""
-        self.assertNotIn(
-            "GBRAIN_ADMIN_BOOTSTRAP_TOKEN", cli.render_launcher("/bin/gbrain-fake")
-        )
+        self.assertNotIn("GBRAIN_ADMIN_BOOTSTRAP_TOKEN", cli.render_launcher("/bin/gbrain-fake"))
 
     def test_launcher_passthrough_cannot_override_home(self):
         os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "HOME"
@@ -448,6 +489,99 @@ class TestSessionStartHook(unittest.TestCase):
 
     def test_empty_recall_prints_nothing(self):
         self.assertEqual(self._run(lambda q, top_k=5: []), "")
+
+
+class TestInstallMnemosyne(EnvCase):
+    """deps.install_mnemosyne installs the [mcp] extra (#20), falls back to a
+    bare install for pins that lack it (loud, never silent), and runs a
+    post-install MCP smoke check that fails loudly on a broken install."""
+
+    @staticmethod
+    def _res(returncode=0, stdout="", stderr=""):
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+    def test_installs_mcp_extra_and_runs_smoke(self):
+        ok_extra = self._res(stdout="pip: ok")
+        ok_smoke = self._res(stdout="")
+        with unittest.mock.patch.object(
+            deps.subprocess, "run", side_effect=[ok_extra, ok_smoke]
+        ) as run:
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"])
+        self.assertEqual(run.call_count, 2)
+        pip_args = run.call_args_list[0].args[0]
+        self.assertIn(f"mnemosyne-memory[mcp]=={version}", pip_args)
+        smoke_args = run.call_args_list[1].args[0]
+        self.assertEqual(smoke_args[:2], [sys.executable, "-c"])
+        self.assertEqual(run.call_args_list[1].kwargs["stdin"], subprocess.DEVNULL)
+
+    def test_bare_fallback_when_pip_rejects_extra(self):
+        no_extra = self._res(returncode=1, stderr="error: does not provide the extra 'mcp'")
+        bare_ok = self._res()
+        smoke_ok = self._res()
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "3.15.1"
+        err = io.StringIO()
+        with (
+            unittest.mock.patch.object(
+                deps.subprocess, "run", side_effect=[no_extra, bare_ok, smoke_ok]
+            ) as run,
+            contextlib.redirect_stderr(err),
+        ):
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, "3.15.1")
+        self.assertEqual(run.call_args_list[1].args[0][4], "mnemosyne-memory==3.15.1")
+        self.assertIn("defines no [mcp] extra", err.getvalue())
+
+    def test_warning_when_pip_warns_unknown_extra_but_exits_zero(self):
+        warned = self._res(
+            stderr="WARNING: mnemosyne-memory 3.15.1 does not provide the extra 'mcp'"
+        )
+        smoke_ok = self._res()
+        os.environ["MNEMOBRAIN_MNEMOSYNE_VERSION"] = "3.15.1"
+        err = io.StringIO()
+        with (
+            unittest.mock.patch.object(
+                deps.subprocess, "run", side_effect=[warned, smoke_ok]
+            ) as run,
+            contextlib.redirect_stderr(err),
+        ):
+            version = deps.install_mnemosyne()
+        self.assertEqual(version, "3.15.1")
+        self.assertEqual(run.call_count, 2)  # no duplicate bare install
+        self.assertIn("defines no [mcp] extra", err.getvalue())
+
+    def test_loud_failure_when_extra_and_bare_both_fail(self):
+        no_extra = self._res(returncode=1, stderr="does not provide the extra 'mcp'")
+        bare_fail = self._res(returncode=1, stderr="ERROR: no matching distribution")
+        with (
+            unittest.mock.patch.object(deps.subprocess, "run", side_effect=[no_extra, bare_fail]),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            deps.install_mnemosyne()
+        self.assertIn("failed (exit 1)", str(ctx.exception))
+
+    def test_smoke_failure_exits_nonzero_with_real_error_text(self):
+        extra_ok = self._res()
+        broken = self._res(
+            returncode=1,
+            stderr="RuntimeError: MCP not installed. Run: pip install mnemosyne-memory[mcp]",
+        )
+        with (
+            unittest.mock.patch.object(deps.subprocess, "run", side_effect=[extra_ok, broken]),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            deps.install_mnemosyne()
+        msg = str(ctx.exception)
+        self.assertIn("post-install mcp smoke check failed", msg)
+        self.assertIn("MCP not installed", msg)
+
+    def test_smoke_timeout_means_server_started(self):
+        extra_ok = self._res()
+        timed_out = subprocess.TimeoutExpired(cmd="mcp-probe", timeout=30)
+        with unittest.mock.patch.object(deps.subprocess, "run", side_effect=[extra_ok, timed_out]):
+            self.assertEqual(
+                deps.install_mnemosyne(), config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"]
+            )
 
 
 class TestBunLookup(unittest.TestCase):
