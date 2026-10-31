@@ -183,9 +183,7 @@ class TestLauncher(EnvCase):
     def test_launcher_passthrough_skips_empty_values(self):
         os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "GBRAIN_ADMIN_BOOTSTRAP_TOKEN"
         os.environ["GBRAIN_ADMIN_BOOTSTRAP_TOKEN"] = ""
-        self.assertNotIn(
-            "GBRAIN_ADMIN_BOOTSTRAP_TOKEN", cli.render_launcher("/bin/gbrain-fake")
-        )
+        self.assertNotIn("GBRAIN_ADMIN_BOOTSTRAP_TOKEN", cli.render_launcher("/bin/gbrain-fake"))
 
     def test_launcher_passthrough_cannot_override_home(self):
         os.environ["MNEMOBRAIN_PASSTHROUGH_ENV"] = "HOME"
@@ -509,7 +507,7 @@ class TestInstallMnemosyne(EnvCase):
             deps.subprocess, "run", side_effect=[ok_extra, ok_smoke]
         ) as run:
             version = deps.install_mnemosyne()
-        self.assertEqual(version, "4.0.0b3")
+        self.assertEqual(version, config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"])
         self.assertEqual(run.call_count, 2)
         pip_args = run.call_args_list[0].args[0]
         self.assertIn(f"mnemosyne-memory[mcp]=={version}", pip_args)
@@ -581,7 +579,9 @@ class TestInstallMnemosyne(EnvCase):
         extra_ok = self._res()
         timed_out = subprocess.TimeoutExpired(cmd="mcp-probe", timeout=30)
         with unittest.mock.patch.object(deps.subprocess, "run", side_effect=[extra_ok, timed_out]):
-            self.assertEqual(deps.install_mnemosyne(), "4.0.0b3")
+            self.assertEqual(
+                deps.install_mnemosyne(), config.DEFAULTS["MNEMOBRAIN_MNEMOSYNE_VERSION"]
+            )
 
 
 class TestBunLookup(unittest.TestCase):
