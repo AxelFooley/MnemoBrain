@@ -20,7 +20,9 @@ explicitly writes pages and queries them. It runs as an HTTP service
 as an MCP endpoint. The launcher sets `HOME=$MNEMOBRAIN_HOME` and maps
 `MNEMOBRAIN_OLLAMA_URL` to `OLLAMA_BASE_URL`, so gbrain's state — its
 `$HOME/.gbrain` config and pglite brain — lands predictably under the MnemoBrain
-root.
+root. Any names listed in `MNEMOBRAIN_PASSTHROUGH_ENV` are also exported, so
+`gbrain serve` can receive `GBRAIN_ADMIN_BOOTSTRAP_TOKEN` and similar without
+hand-editing the generated script.
 
 ## Wiring
 
