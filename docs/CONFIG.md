@@ -15,7 +15,7 @@ the pin/port/model and re-run `mnemobrain init` to persist new values.
 | Variable | Default | Meaning |
 |---|---|---|
 | `MNEMOBRAIN_HOME` | `~/.mnemobrain` | root for all state: bins, services, config, data, logs |
-| `MNEMOBRAIN_GBRAIN_REF` | `v0.50.0.0` | git ref of `github:garrytan/gbrain` installed by `bun add` |
+| `MNEMOBRAIN_GBRAIN_REF` | `v0.54.1.1` | git ref of `github:garrytan/gbrain` installed by `bun add` |
 | `MNEMOBRAIN_MNEMOSYNE_VERSION` | `4.0.0b3` | PyPI pin for `mnemosyne-memory` |
 | `MNEMOBRAIN_GBRAIN_PORT` | `3131` | port the GBrain HTTP service binds |
 | `MNEMOBRAIN_GBRAIN_URL` | `http://127.0.0.1:$MNEMOBRAIN_GBRAIN_PORT/health` | health endpoint checked by `doctor`/`status` |
@@ -23,6 +23,7 @@ the pin/port/model and re-run `mnemobrain init` to persist new values.
 | `MNEMOBRAIN_EMBED_MODEL` | `ollama:bge-m3` | embedding model id |
 | `MNEMOBRAIN_EMBED_DIMS` | `1024` | embedding dimensionality |
 | `MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS` | `168` | Hours until a memory's recency boost halves in SDK/CLI recall (temporal decay) |
+| `MNEMOBRAIN_PASSTHROUGH_ENV` | (empty) | comma-separated list of environment variable names copied from the mnemobrain process into the generated `services/run_gbrain.sh` (e.g. `GBRAIN_ADMIN_BOOTSTRAP_TOKEN`); values are read at render time; empty/unset names are skipped; `HOME` cannot be overridden |
 
 Derived exports from `mnemobrain env` (not separately configurable):
 
@@ -49,17 +50,18 @@ never overwritten (it may be hand-customized; `doctor` reports if its
 ## config file format
 
 Plain `key: value` lines, parsed by a 15-line stdlib parser (no yaml
-dependency). Keys are the variable names minus the `MNEMOBRAIN_` prefix, lowercased:
+dependency). Keys are the variable names minus their `MNEMOBRAIN_`/`MNEMOSYNE_` prefix, lowercased:
 
 ```yaml
 # mnemobrain stack defaults. Process env overrides these values.
-gbrain_ref: v0.50.0.0
+gbrain_ref: v0.54.1.1
 mnemosyne_version: 4.0.0b3
 gbrain_port: 3131
 gbrain_url: http://127.0.0.1:3131/health
 ollama_url: http://localhost:11434/v1
 embed_model: ollama:bge-m3
 embed_dims: 1024
+temporal_halflife_hours: 168
 ```
 
 Notes:
@@ -72,6 +74,9 @@ Notes:
   different path.
 - Re-run `mnemobrain init` after changing pins/ports so the file and the
   running stack agree.
+- `MNEMOBRAIN_GBRAIN_URL` is derived from `MNEMOBRAIN_GBRAIN_PORT`; health
+  checks read the exported URL. If you change the port in a shell that
+  already sourced `mnemobrain env`, re-run `eval "$(mnemobrain env)"`.
 
 ## Temporal decay
 

@@ -11,14 +11,15 @@ import tempfile
 
 DEFAULTS = {
     "MNEMOBRAIN_HOME": "~/.mnemobrain",
-    "MNEMOBRAIN_GBRAIN_REF": "v0.50.0.0",
-    "MNEMOBRAIN_MNEMOSYNE_VERSION": "4.0.0b3",
+    "MNEMOBRAIN_GBRAIN_REF": "v0.54.1.1",
+    "MNEMOBRAIN_MNEMOSYNE_VERSION": "4.0.0",
     "MNEMOBRAIN_GBRAIN_PORT": "3131",
     "MNEMOBRAIN_GBRAIN_URL": "",  # derived from MNEMOBRAIN_GBRAIN_PORT, see default_value()
     "MNEMOBRAIN_OLLAMA_URL": "http://localhost:11434/v1",
     "MNEMOBRAIN_EMBED_MODEL": "ollama:bge-m3",
     "MNEMOBRAIN_EMBED_DIMS": "1024",
     "MNEMOSYNE_TEMPORAL_HALFLIFE_HOURS": "168",
+    "MNEMOBRAIN_PASSTHROUGH_ENV": "",
 }
 
 FILE_KEYS = tuple(k for k in DEFAULTS if k != "MNEMOBRAIN_HOME")
@@ -31,7 +32,11 @@ def default_value(name):
 
 
 def file_key(name):
-    return name[len("MNEMOBRAIN_") :].lower()
+    # Config keys drop whichever MNEMOBRAIN_/MNEMOSYNE_ prefix is present.
+    for prefix in ("MNEMOBRAIN_", "MNEMOSYNE_"):
+        if name.startswith(prefix):
+            return name[len(prefix) :].lower()
+    return name.lower()
 
 
 def parse_config(text):

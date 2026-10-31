@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mnemobrain"
-version = "0.5.0"
+version = "0.6.0"
 description = "Installer, launcher, and doctor for the Mnemosyne + GBrain agent memory stack."
 readme = "README.md"
 requires-python = ">=3.11"

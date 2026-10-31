@@ -74,6 +74,39 @@ Point your agent at [SKILL.md](SKILL.md). It is written as operational
 instructions an installing agent can follow end to end, with a verification
 step after each command.
 
+## Connect an agent over MCP (credentials)
+
+GBrain's HTTP MCP surface requires a bearer credential; a client that
+connects without one gets `invalid_token`. Provision one credential per
+agent with `gbrain mcp grant`, then hand it to that agent with
+`gbrain connect`:
+
+```sh
+GB="$MNEMOBRAIN_HOME/node_modules/.bin/gbrain"
+URL="http://127.0.0.1:${MNEMOBRAIN_GBRAIN_PORT:-3131}"
+
+# 1. Mint a credential (works with the service stopped; against a running
+#    service pass --admin-token-file, or set GBRAIN_ADMIN_BOOTSTRAP_TOKEN).
+HOME="$MNEMOBRAIN_HOME" "$GB" mcp grant my-agent --harness generic \
+  --profile memory-writer --url "$URL" --credentials-out "$HOME/my-agent-cred.json"
+
+# 2. Install the handoff. --install wires supported harnesses directly
+#    (claude-code, codex, opencode); without it, connect prints a
+#    copy-paste block for any other client.
+"$GB" connect "$URL" --harness generic --credentials-file "$HOME/my-agent-cred.json"
+
+# 3. Once the client is configured, verify the wiring (the client id is in
+#    the credential file).
+"$GB" mcp verify --client <client-id> --harness generic --url "$URL" \
+  --credentials-file "$HOME/my-agent-cred.json"
+```
+
+`gbrain mcp adapters` lists the harness ids with built-in wiring. For a
+client without an adapter (including Hermes), use `generic` and add the MCP
+URL plus an `Authorization: Bearer <access_token>` header from the
+credential file to that client's MCP configuration. Keep the credential
+file private.
+
 ## Running GBrain under your own supervisor (optional)
 
 `$MNEMOBRAIN_HOME/services/run_gbrain.sh` is a plain script; any supervisor
